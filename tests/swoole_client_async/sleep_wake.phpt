@@ -1,6 +1,5 @@
 --TEST--
 swoole_client_async: swoole_client sleep & sleep
-
 --SKIPIF--
 <?php require  __DIR__ . '/../include/skipif.inc'; ?>
 --FILE--
@@ -8,19 +7,19 @@ swoole_client_async: swoole_client sleep & sleep
 require __DIR__ . '/../include/bootstrap.php';
 
 $pm = new ProcessManager;
-$pm->parentFunc = function ($pid)
+$pm->parentFunc = function ($pid) use ($pm)
 {
     $cli = new \swoole_client(SWOOLE_SOCK_TCP, SWOOLE_SOCK_ASYNC);
 
     $cli->on("connect", function (swoole_client $cli)
     {
-        assert($cli->isConnected() === true);
+        Assert::true($cli->isConnected());
         $r = $cli->sleep();
-        assert($r);
+        Assert::assert($r);
         swoole_timer_after(200, function () use ($cli)
         {
             $r = $cli->wakeup();
-            assert($r);
+            Assert::assert($r);
         });
         $cli->send(RandStr::gen(1024, RandStr::ALL));
     });
@@ -29,7 +28,7 @@ $pm->parentFunc = function ($pid)
         $recv_len = strlen($data);
         $cli->send(RandStr::gen(1024, RandStr::ALL));
         $cli->close();
-        assert($cli->isConnected() === false);
+        Assert::false($cli->isConnected());
     });
 
     $cli->on("error", function(swoole_client $cli) {
@@ -40,7 +39,7 @@ $pm->parentFunc = function ($pid)
         echo "SUCCESS";
     });
 
-    $cli->connect('127.0.0.1', 9501, 0.1);
+    $cli->connect('127.0.0.1', $pm->getFreePort(), 0.1);
     swoole_event::wait();
     swoole_process::kill($pid);
 };

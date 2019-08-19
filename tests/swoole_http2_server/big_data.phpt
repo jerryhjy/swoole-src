@@ -10,10 +10,14 @@ $pm->parentFunc = function ($pid) use ($pm) {
     go(function () use ($pm) {
         $domain = '127.0.0.1';
         $cli = new Swoole\Coroutine\Http2\Client($domain, $pm->getFreePort(), true);
-        $cli->set(['timeout' => 10]);
-        assert($cli->connect());
+        $cli->set([
+            'timeout' => 10,
+            'ssl_cert_file' => SSL_FILE_DIR2 . '/client-cert.pem',
+            'ssl_key_file' => SSL_FILE_DIR2 . '/client-key.pem'
+        ]);
+        Assert::assert($cli->connect());
 
-        $req = new swoole_http2_request;
+        $req = new Swoole\Http2\Request;
         $req->method = 'POST';
         $req->path = '/';
         $req->headers = [
@@ -22,11 +26,13 @@ $pm->parentFunc = function ($pid) use ($pm) {
             'Accept' => 'text/html,application/xhtml+xml,application/xml',
             'Accept-encoding' => 'gzip'
         ];
-        $req->data = openssl_random_pseudo_bytes(65535 + mt_rand(0, 65535));
-        assert($cli->send($req));
-        $res = $cli->recv();
-        assert($res->statusCode === 200);
-        assert(md5($req->data) === md5($res->data));
+        for ($n = MAX_REQUESTS; $n--;) {
+            $req->data = openssl_random_pseudo_bytes(65535 + mt_rand(0, 65535));
+            Assert::assert($cli->send($req));
+            $res = $cli->recv();
+            Assert::same($res->statusCode, 200);
+            Assert::same(md5($req->data), md5($res->data));
+        }
         $pm->kill();
     });
     swoole_event::wait();
@@ -34,12 +40,17 @@ $pm->parentFunc = function ($pid) use ($pm) {
 $pm->childFunc = function () use ($pm) {
     $http = new swoole_http_server('127.0.0.1', $pm->getFreePort(), SWOOLE_BASE, SWOOLE_SOCK_TCP | SWOOLE_SSL);
     $http->set([
-        'worker_num' => 1,
-        'log_file' => '/dev/null',
-        'open_http2_protocol' => true,
-        'ssl_cert_file' => SSL_FILE_DIR . '/server.crt',
-        'ssl_key_file' => SSL_FILE_DIR . '/server.key'
-    ]);
+            'worker_num' => 1,
+            'log_file' => '/dev/null',
+            'open_http2_protocol' => true,
+            'ssl_cert_file' => SSL_FILE_DIR . '/server.crt',
+            'ssl_key_file' => SSL_FILE_DIR . '/server.key'
+        ] + (IS_IN_TRAVIS ? [] : [
+            'ssl_verify_peer' => true,
+            'ssl_allow_self_signed' => true,
+            'ssl_client_cert_file' => SSL_FILE_DIR2 . '/ca-cert.pem'
+        ])
+    );
     $http->on("WorkerStart", function ($serv, $wid) use ($pm) {
         $pm->wakeup();
     });

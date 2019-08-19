@@ -19,36 +19,21 @@
 
 static int swSystemTimer_signal_set(swTimer *timer, long interval);
 static int swSystemTimer_set(swTimer *timer, long new_interval);
+static void swSystemTimer_close(swTimer *timer);
 
 /**
  * create timer
  */
-int swSystemTimer_init(int interval, int use_pipe)
+int swSystemTimer_init(swTimer *timer, long interval)
 {
-    swTimer *timer = &SwooleG.timer;
+    timer->set = swSystemTimer_set;
+    timer->close = swSystemTimer_close;
     timer->lasttime = interval;
-
-    if (use_pipe)
-    {
-        if (swPipeNotify_auto(&timer->pipe, 0, 0) < 0)
-        {
-            return SW_ERR;
-        }
-        timer->fd = timer->pipe.getFd(&timer->pipe, 0);
-        timer->use_pipe = 1;
-    }
-    else
-    {
-        timer->fd = 1;
-        timer->use_pipe = 0;
-    }
-
     if (swSystemTimer_signal_set(timer, interval) < 0)
     {
         return SW_ERR;
     }
     swSignal_add(SIGALRM, swSystemTimer_signal_handler);
-    timer->set = swSystemTimer_set;
     return SW_OK;
 }
 
@@ -57,17 +42,16 @@ int swSystemTimer_init(int interval, int use_pipe)
  */
 static int swSystemTimer_signal_set(swTimer *timer, long interval)
 {
-    struct itimerval timer_set;
+    struct itimerval timer_set = {{0}};
     int sec = interval / 1000;
-    int msec = (((float) interval / 1000) - sec) * 1000;
+    int msec = interval % 1000;
 
     struct timeval now;
     if (gettimeofday(&now, NULL) < 0)
     {
-        swWarn("gettimeofday() failed. Error: %s[%d]", strerror(errno), errno);
+        swSysWarn("gettimeofday() failed");
         return SW_ERR;
     }
-    bzero(&timer_set, sizeof(timer_set));
 
     if (interval > 0)
     {
@@ -86,43 +70,34 @@ static int swSystemTimer_signal_set(swTimer *timer, long interval)
 
     if (setitimer(ITIMER_REAL, &timer_set, NULL) < 0)
     {
-        swWarn("setitimer() failed. Error: %s[%d]", strerror(errno), errno);
+        swSysWarn("setitimer() failed");
         return SW_ERR;
     }
     return SW_OK;
 }
 
-void swSystemTimer_free(swTimer *timer)
+static void swSystemTimer_close(swTimer *timer)
 {
-    if (timer->use_pipe)
-    {
-        timer->pipe.close(&timer->pipe);
-    }
+    swSystemTimer_signal_set(timer, -1);
 }
 
-static long current_interval = 0;
+static long _next_msec = 0;
 
-static int swSystemTimer_set(swTimer *timer, long new_interval)
+static int swSystemTimer_set(swTimer *timer, long exec_msec)
 {
-    if (new_interval == current_interval)
+    if (exec_msec == _next_msec)
     {
         return SW_OK;
     }
-    if (new_interval == 0)
+    if (exec_msec == 0)
     {
-        new_interval = 1;
+        exec_msec = 1;
     }
-    current_interval = new_interval;
-    return swSystemTimer_signal_set(timer, new_interval);
+    _next_msec = exec_msec;
+    return swSystemTimer_signal_set(timer, exec_msec);
 }
 
 void swSystemTimer_signal_handler(int sig)
 {
-    SwooleG.signal_alarm = 1;
-    uint64_t flag = 1;
-
-    if (SwooleG.timer.use_pipe)
-    {
-        SwooleG.timer.pipe.write(&SwooleG.timer.pipe, &flag, sizeof(flag));
-    }
+    SwooleWG.signal_alarm = 1;
 }

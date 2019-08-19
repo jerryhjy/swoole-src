@@ -15,7 +15,7 @@ $pm->parentFunc = function ($pid) use ($pm)
         'open_eof_check' => true,
         'open_eof_split' => true,
     ]);
-    if (!$client->connect('127.0.0.1', 9501))
+    if (!$client->connect('127.0.0.1', $pm->getFreePort()))
     {
         exit("connect failed\n");
     }
@@ -31,13 +31,13 @@ $pm->parentFunc = function ($pid) use ($pm)
         $list[] = intval($data);
     }
     sort($list);
-    assert($list == range(0, 6));
+    Assert::same($list, range(0, 6));
     $pm->kill();
 };
 
 $pm->childFunc = function () use ($pm)
 {
-    $serv = new swoole_server("127.0.0.1", 9501, SWOOLE_PROCESS, SWOOLE_SOCK_TCP );
+    $serv = new swoole_server('127.0.0.1', $pm->getFreePort(), SWOOLE_PROCESS, SWOOLE_SOCK_TCP );
     $serv->set([
         'log_file' => '/dev/null',
         'worker_num' => 4,
@@ -63,14 +63,15 @@ $pm->childFunc = function () use ($pm)
     });
 
     $serv->addProcess($process);
-    $serv->on("workerStart", function ($serv) use ($pm)
-    {
-        $pm->wakeup();
+    $serv->on("workerStart", function ($serv, $wid) use ($pm) {
+        if ($wid == 0) {
+            $pm->wakeup();
+        }
     });
     $serv->on('connect', function (swoole_server $serv, $fd) use ($process) {
         $process->write(json_encode(["fd" => $fd]));
     });
-    $serv->on('receive', function ($serv, $fd, $from_id, $data) {
+    $serv->on('receive', function ($serv, $fd, $reactor_id, $data) {
 
     });
 
@@ -81,11 +82,6 @@ $pm->childFunc = function () use ($pm)
     });
 
     $serv->on('task', function (swoole_server $serv, $task_id, $worker_id, $data)
-    {
-
-    });
-
-    $serv->on('finish', function (swoole_server $serv, $fd, $rid, $data)
     {
 
     });

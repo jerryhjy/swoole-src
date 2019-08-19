@@ -22,11 +22,10 @@ go(function () {
         echo "$errstr ($errno)<br />\n";
     } else {
         $conn = @stream_socket_accept($socket, 1);
-        assert($conn == false);
+        Assert::false($conn);
     }
 });
 
 swoole_event_wait();
 ?>
 --EXPECT--
-

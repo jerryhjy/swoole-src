@@ -1,5 +1,5 @@
 --TEST--
-swoole_coroutine: main output global
+swoole_coroutine/output: main output global
 --SKIPIF--
 <?php require __DIR__ . '/../../include/skipif.inc'; ?>
 --FILE--
@@ -10,9 +10,9 @@ echo 'aaa';
 go(function () {
     ob_start();
     echo 'bbb';
-    co::sleep(0.001);
-    assert(ob_get_clean() === 'bbb');
+    co::fgets(fopen(__FILE__, 'r'));
+    Assert::same(ob_get_clean(), 'bbb');
 });
-assert(ob_get_clean() === 'aaa');
+Assert::same(ob_get_clean(), 'aaa');
 ?>
 --EXPECT--

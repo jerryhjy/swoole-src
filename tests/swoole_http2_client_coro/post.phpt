@@ -16,7 +16,7 @@ go(function () {
     ]);
     $cli->connect();
 
-    $req = new swoole_http2_request;
+    $req = new Swoole\Http2\Request;
     $req->method = 'POST';
     $req->path = '/api/v4/answers/300000000/voters';
     $req->headers = [
@@ -28,7 +28,7 @@ go(function () {
     $req->data = '{"type":"up"}';
     $cli->send($req);
     $response = $cli->recv();
-    assert(json_decode($response->data)->error->code === 602);
+    Assert::same(json_decode($response->data)->error->code, 602);
 });
 ?>
 --EXPECT--

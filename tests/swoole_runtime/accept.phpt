@@ -36,11 +36,10 @@ go(function () {
     } else {
         $data = fread($fp, 8192);
         fclose($fp);
-        assert(strpos($data,'local time') !== false);
+        Assert::assert(strpos($data,'local time') !== false);
     }
 });
 
 swoole_event_wait();
 ?>
 --EXPECT--
-

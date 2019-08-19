@@ -17,36 +17,32 @@
 #ifndef SW_HTTP_H_
 #define SW_HTTP_H_
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
+#include "swoole.h"
 
-#include <sys/types.h>
-#include <stdint.h>
+SW_EXTERN_C_BEGIN
 
-enum swHttpVersion
+enum swHttp_version
 {
-    HTTP_VERSION_10 = 1,
-    HTTP_VERSION_11,
+    SW_HTTP_VERSION_10 = 1,
+    SW_HTTP_VERSION_11,
 };
 
-enum swHttpMethod
+enum swHttp_method
 {
-    HTTP_DELETE = 1, HTTP_GET, HTTP_HEAD, HTTP_POST, HTTP_PUT, HTTP_PATCH,
+    SW_HTTP_DELETE = 1, SW_HTTP_GET, SW_HTTP_HEAD, SW_HTTP_POST, SW_HTTP_PUT, SW_HTTP_PATCH,
     /* pathological */
-    HTTP_CONNECT, HTTP_OPTIONS, HTTP_TRACE,
+    SW_HTTP_CONNECT, SW_HTTP_OPTIONS, SW_HTTP_TRACE,
     /* webdav */
-    HTTP_COPY, HTTP_LOCK, HTTP_MKCOL, HTTP_MOVE, HTTP_PROPFIND, HTTP_PROPPATCH, HTTP_UNLOCK,
+    SW_HTTP_COPY, SW_HTTP_LOCK, SW_HTTP_MKCOL, SW_HTTP_MOVE, SW_HTTP_PROPFIND, SW_HTTP_PROPPATCH, SW_HTTP_UNLOCK,
     /* subversion */
-    HTTP_REPORT, HTTP_MKACTIVITY, HTTP_CHECKOUT, HTTP_MERGE,
+    SW_HTTP_REPORT, SW_HTTP_MKACTIVITY, SW_HTTP_CHECKOUT, SW_HTTP_MERGE,
     /* upnp */
-    HTTP_MSEARCH, HTTP_NOTIFY, HTTP_SUBSCRIBE, HTTP_UNSUBSCRIBE,
+    SW_HTTP_MSEARCH, SW_HTTP_NOTIFY, SW_HTTP_SUBSCRIBE, SW_HTTP_UNSUBSCRIBE,
     /* Http2 */
-    HTTP_PRI,
+    SW_HTTP_PRI,
 };
 
-enum swHttpStatusCode
+enum swHttp_status_code
 {
     SW_HTTP_CONTINUE = 100,
     SW_HTTP_SWITCHING_PROTOCOLS = 101,
@@ -111,19 +107,34 @@ typedef struct _swHttpRequest
 
 int swHttp_get_method(const char *method_str, int method_len);
 const char* swHttp_get_method_string(int method);
+const char *swHttp_get_status_message(int code);
+
+size_t swHttp_url_decode(char *str, size_t len);
+char* swHttp_url_encode(char const *str, size_t len);
+
 int swHttpRequest_get_protocol(swHttpRequest *request);
 int swHttpRequest_get_header_info(swHttpRequest *request);
 int swHttpRequest_get_header_length(swHttpRequest *request);
 void swHttpRequest_free(swConnection *conn);
+
+static inline void swHttpRequest_clean(swHttpRequest *request)
+{
+    memset(request, 0, offsetof(swHttpRequest, buffer));
+}
+
+int swHttp_static_handler(swServer *serv, swHttpRequest *request, swConnection *conn);
+int swHttp_static_handler_add_location(swServer *serv, const char *location, size_t length);
+
 #ifdef SW_HTTP_100_CONTINUE
 int swHttpRequest_has_expect_header(swHttpRequest *request);
 #endif
-ssize_t swHttpMix_get_package_length(struct _swProtocol *protocol, swConnection *conn, char *data, uint32_t length);
-uint8_t swHttpMix_get_package_length_size(swConnection *conn);
-int swHttpMix_dispatch_frame(swConnection *conn, char *data, uint32_t length);
 
-#ifdef __cplusplus
-}
+#ifdef SW_USE_HTTP2
+ssize_t swHttpMix_get_package_length(swProtocol *protocol, swConnection *conn, char *data, uint32_t length);
+uint8_t swHttpMix_get_package_length_size(swConnection *conn);
+int swHttpMix_dispatch_frame(swProtocol *protocol, swConnection *conn, char *data, uint32_t length);
 #endif
+
+SW_EXTERN_C_END
 
 #endif /* SW_HTTP_H_ */

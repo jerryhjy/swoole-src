@@ -1,5 +1,5 @@
 --TEST--
-swoole_coroutine: coro array map
+swoole_coroutine/forbidden_case: coro array map
 --SKIPIF--
 <?php require __DIR__ . '/../../include/skipif.inc'; ?>
 --FILE--
@@ -13,7 +13,7 @@ co::create(function() {
 });
 function test($p) {
     echo $p;
-    co::sleep(1);
+    co::sleep(.001);
     echo "func end\n";
 }
 echo "main end\n";

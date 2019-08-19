@@ -1,5 +1,5 @@
 --TEST--
-swoole_coroutine: destruct2
+swoole_coroutine/destruct: destruct2
 --SKIPIF--
 <?php require  __DIR__ . '/../../include/skipif.inc'; ?>
 --FILE--
@@ -22,7 +22,7 @@ class T
     {
         go(function () {
             echo "coro start\n";
-            co::sleep(1.0);
+            co::sleep(.001);
             echo "coro exit\n";
         });
     }

@@ -17,10 +17,7 @@
 #ifndef SW_CLIENT_H_
 #define SW_CLIENT_H_
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
+SW_EXTERN_C_BEGIN
 
 #include "buffer.h"
 #include "connection.h"
@@ -45,7 +42,7 @@ enum swHttp_proxy_state
 struct _http_proxy
 {
     uint8_t state;
-    uint8_t ssl;
+    uint8_t dont_handshake;
     int proxy_port;
     char *proxy_host;
     char *user;
@@ -55,7 +52,7 @@ struct _http_proxy
     char *target_host;
     int l_target_host;
     int target_port;
-    char buf[600];
+    char buf[512];
 };
 
 typedef struct _swClient
@@ -170,26 +167,12 @@ int swClient_ssl_handshake(swClient *cli);
 int swClient_ssl_verify(swClient *cli, int allow_self_signed);
 #endif
 void swClient_free(swClient *cli);
-
-typedef struct
-{
-    uint8_t num;
-    struct
-    {
-        uint8_t length;
-        char address[16];
-    } hosts[SW_DNS_HOST_BUFFER_SIZE];
-} swDNSResolver_result;
-
-int swDNSResolver_request(char *domain, void (*callback)(char *, swDNSResolver_result *, void *), void *data);
-int swDNSResolver_free();
-
 //----------------------------------------Stream---------------------------------------
 typedef struct _swStream
 {
     swString *buffer;
-    uint32_t session_id;
     uint8_t cancel;
+    void *private_data;
     void (*response)(struct _swStream *stream, char *data, uint32_t length);
     swClient client;
 } swStream;
@@ -201,8 +184,6 @@ void swStream_set_max_length(swStream *stream, uint32_t max_length);
 int swStream_recv_blocking(int fd, void *__buf, size_t __len);
 //----------------------------------------Stream End------------------------------------
 
-#ifdef __cplusplus
-}
-#endif
+SW_EXTERN_C_END
 
 #endif /* SW_CLIENT_H_ */

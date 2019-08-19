@@ -5,19 +5,18 @@ swoole_websocket_server: websocket server disconnect
 --FILE--
 <?php
 require __DIR__ . '/../include/bootstrap.php';
-require __DIR__ . '/../include/lib/class.websocket_client.php';
 $pm = new ProcessManager;
 $pm->parentFunc = function (int $pid) use ($pm) {
-    $cli = new WebsocketClient;
+    $cli = new SwooleTest\Samtleben\WebsocketClient;
     $connected = $cli->connect('127.0.0.1', $pm->getFreePort(), '/');
-    assert($connected);
+    Assert::assert($connected);
     $response = $cli->sendRecv("shutdown");
     echo unpack('n', substr($response, 0, 2))[1] . "\n";
     echo substr($response, 2) . "\n";
     $pm->kill();
 };
 $pm->childFunc = function () use ($pm) {
-    $serv = new swoole_websocket_server('127.0.0.1', $pm->getFreePort(), mt_rand(0, 1) ? SWOOLE_BASE : SWOOLE_PROCESS);
+    $serv = new swoole_websocket_server('127.0.0.1', $pm->getFreePort(), SERVER_MODE_RANDOM);
     $serv->set([
         // 'worker_num' => 1,
         'log_file' => '/dev/null'

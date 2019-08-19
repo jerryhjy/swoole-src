@@ -1,5 +1,5 @@
 --TEST--
-swoole_coroutine: exception before yield
+swoole_coroutine/exception: exception before yield
 --SKIPIF--
 <?php require  __DIR__ . '/../../include/skipif.inc'; ?>
 --FILE--
@@ -11,7 +11,7 @@ go(function () {
     try {
         echo "start\n";
         throw new Exception('coro Exception');
-        co::sleep(0.5);
+        co::sleep(.001);
         echo "after sleep\n";
     } catch (Exception $e) {
         echo 'Caught exception: ',  $e->getMessage(), "\n";

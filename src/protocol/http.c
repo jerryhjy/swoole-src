@@ -32,7 +32,7 @@ static const char *method_strings[] =
 int swHttp_get_method(const char *method_str, int method_len)
 {
     int i;
-    for (i = 0; i < HTTP_PRI; i++)
+    for (i = 0; i < SW_HTTP_PRI; i++)
     {
         if (strncasecmp(method_strings[i], method_str, method_len) == 0)
         {
@@ -44,11 +44,214 @@ int swHttp_get_method(const char *method_str, int method_len)
 
 const char* swHttp_get_method_string(int method)
 {
-    if (method < 0 || method > HTTP_PRI)
+    if (method < 0 || method > SW_HTTP_PRI)
     {
         return NULL;
     }
     return method_strings[method - 1];
+}
+
+
+const char *swHttp_get_status_message(int code)
+{
+    switch (code)
+    {
+    case 100:
+        return "100 Continue";
+    case 101:
+        return "101 Switching Protocols";
+    case 201:
+        return "201 Created";
+    case 202:
+        return "202 Accepted";
+    case 203:
+        return "203 Non-Authoritative Information";
+    case 204:
+        return "204 No Content";
+    case 205:
+        return "205 Reset Content";
+    case 206:
+        return "206 Partial Content";
+    case 207:
+        return "207 Multi-Status";
+    case 208:
+        return "208 Already Reported";
+    case 226:
+        return "226 IM Used";
+    case 300:
+        return "300 Multiple Choices";
+    case 301:
+        return "301 Moved Permanently";
+    case 302:
+        return "302 Found";
+    case 303:
+        return "303 See Other";
+    case 304:
+        return "304 Not Modified";
+    case 305:
+        return "305 Use Proxy";
+    case 307:
+        return "307 Temporary Redirect";
+    case 400:
+        return "400 Bad Request";
+    case 401:
+        return "401 Unauthorized";
+    case 402:
+        return "402 Payment Required";
+    case 403:
+        return "403 Forbidden";
+    case 404:
+        return "404 Not Found";
+    case 405:
+        return "405 Method Not Allowed";
+    case 406:
+        return "406 Not Acceptable";
+    case 407:
+        return "407 Proxy Authentication Required";
+    case 408:
+        return "408 Request Timeout";
+    case 409:
+        return "409 Conflict";
+    case 410:
+        return "410 Gone";
+    case 411:
+        return "411 Length Required";
+    case 412:
+        return "412 Precondition Failed";
+    case 413:
+        return "413 Request Entity Too Large";
+    case 414:
+        return "414 Request URI Too Long";
+    case 415:
+        return "415 Unsupported Media Type";
+    case 416:
+        return "416 Requested Range Not Satisfiable";
+    case 417:
+        return "417 Expectation Failed";
+    case 418:
+        return "418 I'm a teapot";
+    case 421:
+        return "421 Misdirected Request";
+    case 422:
+        return "422 Unprocessable Entity";
+    case 423:
+        return "423 Locked";
+    case 424:
+        return "424 Failed Dependency";
+    case 426:
+        return "426 Upgrade Required";
+    case 428:
+        return "428 Precondition Required";
+    case 429:
+        return "429 Too Many Requests";
+    case 431:
+        return "431 Request Header Fields Too Large";
+    case 500:
+        return "500 Internal Server Error";
+    case 501:
+        return "501 Method Not Implemented";
+    case 502:
+        return "502 Bad Gateway";
+    case 503:
+        return "503 Service Unavailable";
+    case 504:
+        return "504 Gateway Timeout";
+    case 505:
+        return "505 HTTP Version Not Supported";
+    case 506:
+        return "506 Variant Also Negotiates";
+    case 507:
+        return "507 Insufficient Storage";
+    case 508:
+        return "508 Loop Detected";
+    case 510:
+        return "510 Not Extended";
+    case 511:
+        return "511 Network Authentication Required";
+    case 200:
+    default:
+        return "200 OK";
+    }
+}
+
+static int sw_htoi(char *s)
+{
+    int value;
+    int c;
+
+    c = ((unsigned char *)s)[0];
+    if (isupper(c))
+    {
+        c = tolower(c);
+    }
+    value = (c >= '0' && c <= '9' ? c - '0' : c - 'a' + 10) * 16;
+
+    c = ((unsigned char *)s)[1];
+    if (isupper(c))
+    {
+        c = tolower(c);
+    }
+    value += c >= '0' && c <= '9' ? c - '0' : c - 'a' + 10;
+
+    return (value);
+}
+
+/* return value: length of decoded string */
+size_t swHttp_url_decode(char *str, size_t len)
+{
+    char *dest = str;
+    char *data = str;
+
+    while (len--) {
+        if (*data == '+') {
+            *dest = ' ';
+        }
+        else if (*data == '%' && len >= 2 && isxdigit((int) *(data + 1)) && isxdigit((int) *(data + 2))) {
+            *dest = (char) sw_htoi(data + 1);
+            data += 2;
+            len -= 2;
+        } else {
+            *dest = *data;
+        }
+        data++;
+        dest++;
+    }
+    *dest = '\0';
+
+    return dest - str;
+}
+
+char* swHttp_url_encode(char const *str, size_t len)
+{
+    static unsigned char hexchars[] = "0123456789ABCDEF";
+
+    register size_t x, y;
+    char *ret = sw_malloc(len * 3);
+
+    for (x = 0, y = 0; len--; x++, y++) {
+        char c = str[x];
+
+        ret[y] = c;
+        if ((c < '0' && c != '-' &&  c != '.') ||
+            (c < 'A' && c > '9') ||
+            (c > 'Z' && c < 'a' && c != '_') ||
+            (c > 'z' && c != '~')) {
+            ret[y++] = '%';
+            ret[y++] = hexchars[(unsigned char) c >> 4];
+            ret[y] = hexchars[(unsigned char) c & 15];
+        }
+    }
+    ret[y] = '\0';
+
+    do {
+        size_t size = y + 1;
+        char *tmp = sw_malloc(size);
+        memcpy(tmp, ret, size);
+        sw_free(ret);
+        ret = tmp;
+    } while (0);
+
+    return ret;
 }
 
 /**
@@ -67,91 +270,91 @@ int swHttpRequest_get_protocol(swHttpRequest *request)
     //http method
     if (memcmp(buf, "GET", 3) == 0)
     {
-        request->method = HTTP_GET;
+        request->method = SW_HTTP_GET;
         request->offset = 4;
         buf += 4;
     }
     else if (memcmp(buf, "POST", 4) == 0)
     {
-        request->method = HTTP_POST;
+        request->method = SW_HTTP_POST;
         request->offset = 5;
         buf += 5;
     }
     else if (memcmp(buf, "PUT", 3) == 0)
     {
-        request->method = HTTP_PUT;
+        request->method = SW_HTTP_PUT;
         request->offset = 4;
         buf += 4;
     }
     else if (memcmp(buf, "PATCH", 5) == 0)
     {
-        request->method = HTTP_PATCH;
+        request->method = SW_HTTP_PATCH;
         request->offset = 6;
         buf += 6;
     }
     else if (memcmp(buf, "DELETE", 6) == 0)
     {
-        request->method = HTTP_DELETE;
+        request->method = SW_HTTP_DELETE;
         request->offset = 7;
         buf += 7;
     }
     else if (memcmp(buf, "HEAD", 4) == 0)
     {
-        request->method = HTTP_HEAD;
+        request->method = SW_HTTP_HEAD;
         request->offset = 5;
         buf += 5;
     }
     else if (memcmp(buf, "OPTIONS", 7) == 0)
     {
-        request->method = HTTP_OPTIONS;
+        request->method = SW_HTTP_OPTIONS;
         request->offset = 8;
         buf += 8;
     }
     else if (memcmp(buf, "COPY", 4) == 0)
     {
-        request->method = HTTP_COPY;
+        request->method = SW_HTTP_COPY;
         request->offset = 5;
         buf += 5;
     }
     else if (memcmp(buf, "LOCK", 4) == 0)
     {
-        request->method = HTTP_LOCK;
+        request->method = SW_HTTP_LOCK;
         request->offset = 5;
         buf += 5;
     }
     else if (memcmp(buf, "MKCOL", 5) == 0)
     {
-        request->method = HTTP_MKCOL;
+        request->method = SW_HTTP_MKCOL;
         request->offset = 4;
         buf += 4;
     }
     else if (memcmp(buf, "MOVE", 4) == 0)
     {
-        request->method = HTTP_MOVE;
+        request->method = SW_HTTP_MOVE;
         request->offset = 5;
         buf += 5;
     }
     else if (memcmp(buf, "PROPFIND", 8) == 0)
     {
-        request->method = HTTP_PROPFIND;
+        request->method = SW_HTTP_PROPFIND;
         request->offset = 9;
         buf += 9;
     }
     else if (memcmp(buf, "PROPPATCH", 9) == 0)
     {
-        request->method = HTTP_PROPPATCH;
+        request->method = SW_HTTP_PROPPATCH;
         request->offset = 10;
         buf += 10;
     }
     else if (memcmp(buf, "UNLOCK", 6) == 0)
     {
-        request->method = HTTP_UNLOCK;
+        request->method = SW_HTTP_UNLOCK;
         request->offset = 7;
         buf += 7;
     }
     else if (memcmp(buf, "REPORT", 6) == 0)
     {
-        request->method = HTTP_REPORT;
+        request->method = SW_HTTP_REPORT;
         request->offset = 7;
         buf += 7;
     }
@@ -159,7 +362,7 @@ int swHttpRequest_get_protocol(swHttpRequest *request)
     //HTTP2 Connection Preface
     else if (memcmp(buf, "PRI", 3) == 0)
     {
-        request->method = HTTP_PRI;
+        request->method = SW_HTTP_PRI;
         if (memcmp(buf, SW_HTTP2_PRI_STRING, sizeof(SW_HTTP2_PRI_STRING) - 1) == 0)
         {
             request->buffer->offset = sizeof(SW_HTTP2_PRI_STRING) - 1;
@@ -173,7 +376,8 @@ int swHttpRequest_get_protocol(swHttpRequest *request)
 #endif
     else
     {
-        _excepted: request->excepted = 1;
+        _excepted:
+        request->excepted = 1;
         return SW_ERR;
     }
 
@@ -211,13 +415,13 @@ int swHttpRequest_get_protocol(swHttpRequest *request)
             }
             if (memcmp(p, "HTTP/1.1", 8) == 0)
             {
-                request->version = HTTP_VERSION_11;
-                goto end;
+                request->version = SW_HTTP_VERSION_11;
+                goto _end;
             }
             else if (memcmp(p, "HTTP/1.0", 8) == 0)
             {
-                request->version = HTTP_VERSION_10;
-                goto end;
+                request->version = SW_HTTP_VERSION_10;
+                goto _end;
             }
             else
             {
@@ -227,7 +431,8 @@ int swHttpRequest_get_protocol(swHttpRequest *request)
             break;
         }
     }
-    end: p += 8;
+    _end:
+    p += 8;
     request->buffer->offset = p - request->buffer->str;
     return SW_OK;
 }
@@ -365,7 +570,8 @@ int swHttpRequest_get_header_length(swHttpRequest *request)
     return SW_ERR;
 }
 
-ssize_t swHttpMix_get_package_length(struct _swProtocol *protocol, swConnection *conn, char *data, uint32_t length)
+#ifdef SW_USE_HTTP2
+ssize_t swHttpMix_get_package_length(swProtocol *protocol, swConnection *conn, char *data, uint32_t length)
 {
     if (conn->websocket_status == WEBSOCKET_STATUS_ACTIVE)
     {
@@ -377,7 +583,7 @@ ssize_t swHttpMix_get_package_length(struct _swProtocol *protocol, swConnection 
     }
     else
     {
-        assert(0);
+        abort();
         return SW_ERR;
     }
 }
@@ -394,24 +600,25 @@ uint8_t swHttpMix_get_package_length_size(swConnection *conn)
     }
     else
     {
-        assert(0);
+        abort();
         return 0;
     }
 }
 
-int swHttpMix_dispatch_frame(swConnection *conn, char *data, uint32_t length)
+int swHttpMix_dispatch_frame(swProtocol *proto, swConnection *conn, char *data, uint32_t length)
 {
     if (conn->websocket_status == WEBSOCKET_STATUS_ACTIVE)
     {
-        return swWebSocket_dispatch_frame(conn, data, length);
+        return swWebSocket_dispatch_frame(proto, conn, data, length);
     }
     else if (conn->http2_stream)
     {
-        return swReactorThread_dispatch(conn, data, length);
+        return swReactorThread_dispatch(proto, conn, data, length);
     }
     else
     {
-        assert(0);
+        abort();
         return SW_ERR;
     }
 }
+#endif

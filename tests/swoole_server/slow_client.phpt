@@ -35,13 +35,13 @@ $pm->parentFunc = function ($pid) use ($port)
         usleep(10000);
         $bytes += strlen($r);
     }
-    assert($bytes == N);
+    Assert::same($bytes, N);
     swoole_process::kill($pid);
 };
 
 $pm->childFunc = function () use ($pm, $port)
 {
-    $serv = new swoole_server("127.0.0.1", $port);
+    $serv = new swoole_server('127.0.0.1', $port);
     $serv->set([
         'worker_num' => 1,
         'log_file' => '/dev/null',
@@ -56,7 +56,7 @@ $pm->childFunc = function () use ($pm, $port)
         $_send_data = str_repeat("A", N);
         $serv->send($fd, $_send_data);
     });
-    $serv->on('receive', function ($serv, $fd, $from_id, $data)
+    $serv->on('receive', function ($serv, $fd, $reactor_id, $data)
     {
 
     });

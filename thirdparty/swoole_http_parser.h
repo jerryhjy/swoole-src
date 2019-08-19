@@ -25,16 +25,8 @@
 extern "C" {
 #endif
 
-
 #include <sys/types.h>
-#if defined(_WIN32) && !defined(__MINGW32__)
-# include <windows.h>
-# include "config.w32.h"
-#else
-# include "php_config.h"
-#endif
-
-#include "php_stdint.h"
+#include <stdint.h>
 
 /* Compile with -DPHP_HTTP_PARSER_STRICT=0 to make less checks, but run
  * faster
@@ -103,6 +95,8 @@ enum swoole_http_method
   , PHP_HTTP_NOTIFY
   , PHP_HTTP_SUBSCRIBE
   , PHP_HTTP_UNSUBSCRIBE
+  /* proxy */
+  , PHP_HTTP_PURGE
   /* unknown, not implemented */
   , PHP_HTTP_NOT_IMPLEMENTED
   };

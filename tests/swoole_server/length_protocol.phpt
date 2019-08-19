@@ -1,6 +1,5 @@
 --TEST--
 swoole_server: (length protocol) recv 100k packet
-
 --SKIPIF--
 <?php require  __DIR__ . '/../include/skipif.inc'; ?>
 --FILE--
@@ -33,10 +32,10 @@ class PkgServer extends TestServer
 }
 
 $pm = new ProcessManager;
-$pm->parentFunc = function ($pid)
+$pm->parentFunc = function ($pid) use ($pm)
 {
     $client = new swoole_client(SWOOLE_SOCK_TCP);
-    if (!$client->connect('127.0.0.1', 9501))
+    if (!$client->connect('127.0.0.1', $pm->getFreePort()))
     {
         exit("connect failed\n");
     }
@@ -70,11 +69,12 @@ $pm->parentFunc = function ($pid)
     //echo "send ".TestServer::PKG_NUM." packet sucess, send $bytes bytes\n";
     $client->close();
 
+    usleep(1);
     swoole_process::kill($pid);
 };
 
 $pm->childFunc = function () use ($pm) {
-    $serv = new PkgServer(true);
+    $serv = new PkgServer($pm->getFreePort(), true);
     $serv->set([
         'worker_num' => 1,
         //'dispatch_mode'         => 1,
@@ -92,6 +92,6 @@ $pm->childFunc = function () use ($pm) {
 $pm->childFirst();
 $pm->run();
 ?>
---EXPECTF--
+--EXPECTREGEX--
 end
-Total count=100000, bytes=%d
+Total count=100000?, bytes=\d+

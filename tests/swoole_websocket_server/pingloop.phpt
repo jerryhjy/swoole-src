@@ -16,7 +16,7 @@ $pm->parentFunc = function (int $pid) use ($pm) {
         go(function () use ($pm) {
             $cli = new \Swoole\Coroutine\Http\Client('127.0.0.1', $pm->getFreePort());
             $ret = $cli->upgrade('/');
-            assert($ret);
+            Assert::assert($ret);
             $loop = 0;
             while ($response = $cli->recv(-1)) {
                 switch ($response->opcode) {
@@ -31,25 +31,25 @@ $pm->parentFunc = function (int $pid) use ($pm) {
                         } else {
                             $ret = $cli->push('', WEBSOCKET_OPCODE_PONG);
                         }
-                        assert($ret);
+                        Assert::assert($ret);
                         break;
                     case WEBSOCKET_OPCODE_CLOSE:
                         break 2;
                     default:
-                        assert(0, 'never hear.');
+                        Assert::assert(0, 'never hear.');
                 }
             }
-            assert($loop === PING_LOOP);
+            Assert::same($loop, PING_LOOP);
         });
     }
     swoole_event_wait();
     global $count;
-    assert($count === PING_LOOP * MAX_CONCURRENCY_MID);
+    Assert::same($count, PING_LOOP * MAX_CONCURRENCY_MID);
     $pm->kill();
     echo "DONE";
 };
 $pm->childFunc = function () use ($pm) {
-    $serv = new swoole_websocket_server('127.0.0.1', $pm->getFreePort(), mt_rand(0, 1) ? SWOOLE_BASE : SWOOLE_PROCESS);
+    $serv = new swoole_websocket_server('127.0.0.1', $pm->getFreePort(), SERVER_MODE_RANDOM);
     $serv->set([
         'worker_num' => 1,
         'log_file' => '/dev/null'
@@ -69,14 +69,14 @@ $pm->childFunc = function () use ($pm) {
         $server->after(PING_LOOP * PING_INTERVAL, function () use ($pm, $server, $timer_id) {
             $server->clearTimer($timer_id);
             foreach ($server->connections as $fd) {
-                $server->push($fd, new swoole_websocket_close_frame);
+                $server->push($fd, new swoole_websocket_closeframe);
             }
         });
         $pm->wakeup();
     });
     $serv->on('open', function ($server, $req) { });
     $serv->on('message', function ($server, swoole_websocket_frame $frame) {
-        assert($frame->opcode === WEBSOCKET_OPCODE_PONG);
+        Assert::same($frame->opcode, WEBSOCKET_OPCODE_PONG);
     });
     $serv->on('close', function ($server, $fd) { });
     $serv->start();

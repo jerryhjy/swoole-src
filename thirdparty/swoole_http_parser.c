@@ -520,7 +520,7 @@ size_t swoole_http_parser_execute (swoole_http_parser *parser,
           case 'M': parser->method = PHP_HTTP_MKCOL; /* or MOVE, MKCALENDAR, MKACTIVITY, MERGE, M-SEARCH */ break;
           case 'N': parser->method = PHP_HTTP_NOTIFY; break;
           case 'O': parser->method = PHP_HTTP_OPTIONS; break;
-          case 'P': parser->method = PHP_HTTP_POST; /* or PROPFIND or PROPPATCH or PUT */ break;
+          case 'P': parser->method = PHP_HTTP_POST; /* or PROPFIND, PROPPATCH, PUT, PATCH, PURGE */ break;
           case 'R': parser->method = PHP_HTTP_REPORT; break;
           case 'S': parser->method = PHP_HTTP_SUBSCRIBE; /* or SEARCH */ break;
           case 'T': parser->method = PHP_HTTP_TRACE; break;
@@ -569,13 +569,15 @@ size_t swoole_http_parser_execute (swoole_http_parser *parser,
         } else if (index == 1 && parser->method == PHP_HTTP_POST && ch == 'R') {
           parser->method = PHP_HTTP_PROPFIND; /* or HTTP_PROPPATCH */
         } else if (index == 1 && parser->method == PHP_HTTP_POST && ch == 'U') {
-          parser->method = PHP_HTTP_PUT;
+          parser->method = PHP_HTTP_PUT; /* or PHP_HTTP_PURGE */
         } else if (index == 1 && parser->method == PHP_HTTP_POST && ch == 'A') {
           parser->method = PHP_HTTP_PATCH;
         } else if (index == 1 && parser->method == PHP_HTTP_SUBSCRIBE && ch == 'E') {
           parser->method = PHP_HTTP_SEARCH;
         } else if (index == 2 && parser->method == PHP_HTTP_UNLOCK && ch == 'S') {
           parser->method = PHP_HTTP_UNSUBSCRIBE;
+        } else if (index == 2 && parser->method == PHP_HTTP_PUT && ch == 'R') {
+          parser->method = PHP_HTTP_PURGE;
         } else if (index == 4 && parser->method == PHP_HTTP_PROPFIND && ch == 'P') {
           parser->method = PHP_HTTP_PROPPATCH;
         } else {
@@ -1135,6 +1137,12 @@ size_t swoole_http_parser_execute (swoole_http_parser *parser,
           break;
         }
 
+        // WARNING: Swoole changes!
+        // header name allow all normal chars (else will lead to error)
+        if (normal_url_char[(unsigned char)ch])
+        {
+            break;
+        }
         goto error;
       }
 
@@ -1222,7 +1230,7 @@ size_t swoole_http_parser_execute (swoole_http_parser *parser,
 
           case h_connection:
           case h_transfer_encoding:
-            assert(0 && "Shouldn't get here.");
+            assert(0 && "Shouldn't get here");
             break;
 
           case h_content_length:

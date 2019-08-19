@@ -11,7 +11,7 @@ use Swoole\Coroutine as co;
 $pm = new ProcessManager;
 $pm->parentFunc = function ($pid) use ($pm) {
     co::create(function () use ($pm) {
-        $cli = new Swoole\Coroutine\Http\Client('127.0.0.1', 9501);
+        $cli = new Swoole\Coroutine\Http\Client('127.0.0.1', $pm->getFreePort());
         $cli->set([
             'timeout' => 10
         ]);
@@ -20,9 +20,9 @@ $pm->parentFunc = function ($pid) use ($pm) {
             'Accept' => '*/*'
         ]);
         $ret = $cli->get('/');
-        assert($ret == true);
-        assert($cli->statusCode == 200);
-        assert(strlen($cli->body) > 1024 * 5);
+        Assert::true($ret);
+        Assert::same($cli->statusCode, 200);
+        Assert::assert(strlen($cli->body) > 1024 * 5);
         $pm->kill();
         echo "OK\n";
     });
@@ -31,7 +31,7 @@ $pm->parentFunc = function ($pid) use ($pm) {
 
 $pm->childFunc = function () use ($pm)
 {
-    $serv = new swoole_server('127.0.0.1', 9501, SWOOLE_BASE);
+    $serv = new swoole_server('127.0.0.1', $pm->getFreePort(), SWOOLE_BASE);
     $serv->set(array(
         'log_file' => '/dev/null'
     ));
