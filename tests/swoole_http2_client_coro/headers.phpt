@@ -1,12 +1,14 @@
 --TEST--
 swoole_http2_client_coro: http2 headers auto to lower
 --SKIPIF--
-<?php require __DIR__ . '/../include/skipif.inc'; ?>
+<?php require __DIR__ . '/../include/skipif.inc';
+skip_if_offline();
+?>
 --FILE--
 <?php
 require __DIR__ . '/../include/bootstrap.php';
 go(function () {
-    $domain = 'www.swoole.com';
+    $domain = 'mail.qq.com';
     $cli = new Swoole\Coroutine\Http2\Client($domain, 443, true);
     $cli->set([
         'timeout' => 10,

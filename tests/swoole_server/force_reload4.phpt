@@ -8,7 +8,7 @@ require __DIR__ . '/../include/bootstrap.php';
 
 use Swoole\Timer;
 
-$pm = new ProcessManager;
+$pm = new SwooleTest\ProcessManager;
 $pm->setWaitTimeout(30);
 $pm->parentFunc = function () use ($pm) {
     echo "OK\n";
@@ -41,5 +41,5 @@ $pm->run();
 ?>
 --EXPECTF--
 [%s]	INFO	Server is shutdown now
-[%s]	WARNING	swWorker_reactor_is_empty (ERRNO 9012): worker exit timeout, forced to terminate
+[%s]	WARNING	%s (ERRNO 9012): worker exit timeout, forced termination
 OK

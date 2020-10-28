@@ -4,6 +4,7 @@ swoole_http_client_coro: socks5 proxy
 <?php
 require __DIR__ . '/../include/skipif.inc';
 skip_if_no_socks5_proxy();
+skip_if_offline();
 ?>
 --FILE--
 <?php
@@ -18,7 +19,7 @@ go(function ()
     $cli->set([
         'timeout'     => 5,
         'socks5_host' => SOCKS5_PROXY_HOST,
-        'socks5_port' => SOCKS5_PROXY_PORT
+        'socks5_port' => SOCKS5_PROXY_PORT,
     ]);
 
     $ret = $cli->get('/');

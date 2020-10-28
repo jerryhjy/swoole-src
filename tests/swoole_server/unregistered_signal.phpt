@@ -3,12 +3,12 @@ swoole_server: unregistered signal
 --SKIPIF--
 <?php
 require __DIR__ . '/../include/skipif.inc';
-skip_if_in_valgrind();
+//skip_if_in_valgrind();
 ?>
 --FILE--
 <?php
 require __DIR__ . '/../include/bootstrap.php';
-$pm = new ProcessManager;
+$pm = new SwooleTest\ProcessManager;
 $pm->parentFunc = function ($pid) use ($pm) {
     $pid = file_get_contents(TEST_PID_FILE);
     usleep(1000);

@@ -1,16 +1,17 @@
 --TEST--
 swoole_coroutine_system: gethostbyname for IPv6
 --SKIPIF--
-<?php require __DIR__ . '/../include/skipif.inc'; ?>
+<?php require __DIR__ . '/../include/skipif.inc';
+skip_if_offline();
+?>
 --FILE--
 <?php
 require __DIR__ . '/../include/bootstrap.php';
 
-use Swoole\Coroutine as co;
-
-co::create(function () {
-    $ip = co::gethostbyname('ipv6.baidu.com', AF_INET6);
-    Assert::assert(!empty($ip));
+Swoole\Coroutine::create(function () {
+    $ip = Swoole\Coroutine\System::gethostbyname('ipv6.google.com', AF_INET6);
+    phpt_var_dump($ip);
+    Assert::notEmpty($ip);
 });
 
 ?>

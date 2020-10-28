@@ -7,10 +7,9 @@ swoole_server/event: onManagerStop
 require __DIR__ . '/../../include/bootstrap.php';
 
 use Swoole\Server;
-use SwooleTest\ProcessManager;
 use Swoole\Atomic;
 
-$pm = new ProcessManager;
+$pm = new SwooleTest\ProcessManager;
 $pm->setWaitTimeout(5);
 
 const FILE = __DIR__ . '/tmp_result.txt';

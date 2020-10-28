@@ -1,11 +1,11 @@
 define timer_list
-    if SwooleG.timer.initialized == 1
-        printf "current timer number: %d, round: %d\n", SwooleG.timer.num,SwooleG.timer->round
+    if SwooleTG.timer
+        printf "current timer number: %d, round: %d\n", SwooleTG.timer.num,SwooleTG.timer->round
         set $running = 1
         set $i = 1
         while $running
-            if $i < SwooleG.timer->heap->num
-                set $tmp = SwooleG.timer->heap->nodes[$i]
+            if $i < SwooleTG.timer->heap->num
+                set $tmp = SwooleTG.timer->heap->nodes[$i]
                 set $node = (swTimer_node *)$tmp->data
                 if $node
                    printf "\t timer[%d] exec_msec:%ld round:%ld\n", $node->id, $node->exec_msec, $node->round
@@ -21,13 +21,14 @@ define timer_list
 end
 
 define reactor_info
-    if SwooleG.main_reactor
-        printf "\t reactor id: %d\n",SwooleG.main_reactor->id
-        printf "\t running: %d\n", SwooleG.main_reactor->running
-        printf "\t event_num: %d\n", SwooleG.main_reactor->event_num
-        printf "\t max_event_num: %d\n", SwooleG.main_reactor->max_event_num
-        printf "\t check_timer: %d\n", SwooleG.main_reactor->check_timer
-        printf "\t timeout_msec: %d\n", SwooleG.main_reactor->timeout_msec
+    if SwooleTG.reactor
+        printf "\t reactor id: %d\n",SwooleTG.reactor->id
+        printf "\t running: %d\n", SwooleTG.reactor->running
+        printf "\t event_num: %d\n", SwooleTG.reactor->event_num
+        printf "\t aio_task_num: %d\n", SwooleTG.aio_task_num
+        printf "\t max_event_num: %d\n", SwooleTG.reactor->max_event_num
+        printf "\t check_timer: %d\n", SwooleTG.reactor->check_timer
+        printf "\t timeout_msec: %d\n", SwooleTG.reactor->timeout_msec
     end
 end
 
@@ -85,14 +86,23 @@ define co_bt
     if swoole_coro_count() == 0
         printf "no coroutine is running\n"
     end
-    ____executor_globals
+    ____sw_executor_globals
     if $argc > 0
-        set $cid = (int)$arg0
+        set $cid = (int) $arg0
     else
-        set $cid = 'swoole::Coroutine::get_current_cid'()
+        if 'swoole::Coroutine::current'
+            set $cid = (int) 'swoole::Coroutine::current'->cid
+        else
+            set $cid = -1
+        end
     end
-    printf "coroutine cid:[%d]\n",$cid
-    __co_bt $cid
+
+    printf "coroutine cid: [%d]\n", $cid
+    if $argc > 0
+        __co_bt $cid
+    else
+        sw_dump_bt php_swoole_get_executor_globals()->current_execute_data
+    end
 end
 document co_bt
     dump current coroutine or the cid backtrace.
@@ -103,9 +113,9 @@ define __co_bt
     set $cid = (int)$arg0
     set $co = swoole_coro_get($cid)
     if $co
-        set $task = (php_coro_task *)$co->task
+        set $task = (php_coro_task *) $co->task
         if $task
-            dump_bt $task->execute_data
+            sw_dump_bt $task->execute_data
         end
     else
         printf "coroutines %d not found\n", $cid
@@ -114,25 +124,18 @@ end
 
 define co_status
     printf "\t c_stack_size: %d\n",  'swoole::Coroutine::stack_size'
-    printf "\t call_stack_size: %d\n",  'swoole::Coroutine::call_stack_size'
     printf "\t active: %d\n",  'swoole::PHPCoroutine::active'
     printf "\t coro_num: %d\n",  swoole_coro_count()
-    printf "\t max_coro_num: %d\n",  'swoole::PHPCoroutine::max_num'
     printf "\t peak_coro_num: %d\n",  'swoole::Coroutine::peak_num'
+    printf "\t config: "
+    print 'swoole::PHPCoroutine::config'
 end
 
-define ____executor_globals
-    if basic_functions_module.zts
-        if !$tsrm_ls
-            set $tsrm_ls = ts_resource_ex(0, 0)
-        end
-        set $eg = ((zend_executor_globals*) (*((void ***) $tsrm_ls))[executor_globals_id-1])
-    else
-        set $eg = executor_globals
-    end
+define ____sw_executor_globals
+    set $eg = php_swoole_get_executor_globals()
 end
 
-define ____print_str
+define ____sw_print_str
     set $tmp = 0
     set $str = $arg0
     if $argc > 2
@@ -156,7 +159,7 @@ define ____print_str
     printf "\""
 end
 
-define dump_bt
+define sw_dump_bt
     set $ex = $arg0
     while $ex
         printf "[%p] ", $ex
@@ -206,7 +209,7 @@ define dump_bt
                     printf "%f", $zvalue->value.dval
                 end
                 if $type == 6
-                    ____print_str $zvalue->value.str->val $zvalue->value.str->len
+                    ____sw_print_str $zvalue->value.str->val $zvalue->value.str->len
                 end
                 if $type == 7
                     printf "array(%d)[%p]", $zvalue->value.arr->nNumOfElements, $zvalue

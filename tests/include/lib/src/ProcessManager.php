@@ -19,19 +19,22 @@
 
 namespace SwooleTest;
 
-use Swoole;
-use swoole_atomic;
+use RuntimeException;
+use Swoole\Atomic;
+use Swoole\Event;
+use Swoole\Process;
 
 class ProcessManager
 {
     /**
-     * @var swoole_atomic
+     * @var Atomic
      */
     protected $atomic;
     protected $alone = false;
     protected $freePorts = [];
     protected $randomFunc = 'get_safe_random';
     protected $randomData = [[]];
+    protected $randomDataArray = [];
 
     /**
      * wait wakeup 1s default
@@ -45,15 +48,17 @@ class ProcessManager
 
     protected $childPid;
     protected $childStatus = 255;
+    protected $expectExitSignal = [0, SIGTERM];
     protected $parentFirst = false;
     /**
-     * @var Swoole\Process
+     * @var Process
      */
     protected $childProcess;
+    protected $logFileHandle;
 
     public function __construct()
     {
-        $this->atomic = new Swoole\Atomic(0);
+        $this->atomic = new Atomic(0);
     }
 
     public function setParent(callable $func)
@@ -113,6 +118,16 @@ class ProcessManager
         }
     }
 
+    public function setLogFile($file)
+    {
+        $this->logFileHandle = fopen($file, "a+");
+    }
+
+    public function writeLog($msg)
+    {
+        fwrite($this->logFileHandle, $msg . PHP_EOL);
+    }
+
     /**
      * @param int $index
      * @return mixed
@@ -130,6 +145,36 @@ class ProcessManager
     public function initRandomData(int $size, int $len = null)
     {
         $this->initRandomDataEx(1, $size, $len);
+    }
+
+    /**
+     * 生成一个随机字节组成的数组
+     * @param int $n
+     * @param int $len 默认为0，表示随机产生长度
+     * @param bool $base64
+     * @throws \Exception
+     */
+    public function initRandomDataArray($n = 1, $len = 0, bool $base64 = false)
+    {
+        while ($n--) {
+            if ($len == 0) {
+                $len = rand(1024, 1 * 1024 * 1024);
+            }
+            $bytes = random_bytes($len);
+            $this->randomDataArray[] = $base64 ? base64_encode($bytes) : $bytes;
+        }
+    }
+
+    /**
+     * @param $index
+     * @return mixed
+     */
+    public function getRandomDataElement(int $index = 0)
+    {
+        if (!isset($this->randomDataArray[$index])) {
+            throw new RuntimeException("out of array");
+        }
+        return $this->randomDataArray[$index];
     }
 
     public function getRandomData()
@@ -170,7 +215,7 @@ class ProcessManager
         if (!empty($this->randomData[$block_id])) {
             return array_shift($this->randomData[$block_id]);
         } else {
-            throw new \RuntimeException('Out of the bound');
+            throw new RuntimeException('Out of the bound');
         }
     }
 
@@ -194,8 +239,8 @@ class ProcessManager
             define('PCNTL_ESRCH', 3);
         }
         if (!$this->alone && $this->childPid) {
-            if ($force || (!@Swoole\Process::kill($this->childPid) && swoole_errno() !== PCNTL_ESRCH)) {
-                if (!@Swoole\Process::kill($this->childPid, SIGKILL) && swoole_errno() !== PCNTL_ESRCH) {
+            if ($force || (!@Process::kill($this->childPid) && swoole_errno() !== PCNTL_ESRCH)) {
+                if (!@Process::kill($this->childPid, SIGKILL) && swoole_errno() !== PCNTL_ESRCH) {
                     exit('KILL CHILD PROCESS ERROR');
                 }
             }
@@ -204,10 +249,15 @@ class ProcessManager
 
     public function initFreePorts(int $num = 1)
     {
-        if (empty($this->freePorts)) {
-            for ($i = $num; $i--;) {
-                $this->freePorts[] = $this->useConstantPorts ? (9500 + $num - $i) : get_one_free_port();
-            }
+        for ($i = $num; $i--;) {
+            $this->freePorts[] = $this->useConstantPorts ? (9500 + $num - $i + count($this->freePorts)) : get_one_free_port();
+        }
+    }
+
+    public function initFreeIPv6Ports(int $num = 1)
+    {
+        for ($i = $num; $i--;) {
+            $this->freePorts[] = $this->useConstantPorts ? (9500 + $num - $i + count($this->freePorts)) : get_one_free_port_ipv6();
         }
     }
 
@@ -223,11 +273,11 @@ class ProcessManager
             } elseif ($argv[1] == 'parent') {
                 return $this->runParentFunc();
             } else {
-                throw new \RuntimeException("bad parameter \$1\n");
+                throw new RuntimeException("bad parameter \$1\n");
             }
         }
         $this->initFreePorts();
-        $this->childProcess = new Swoole\Process(function () {
+        $this->childProcess = new Process(function () {
             if ($this->parentFirst) {
                 $this->wait();
             }
@@ -244,9 +294,13 @@ class ProcessManager
             $this->wait();
         }
         $this->runParentFunc($this->childPid = $this->childProcess->pid);
-        Swoole\Event::wait();
-        $waitInfo = Swoole\Process::wait(true);
+        Event::wait();
+        $waitInfo = Process::wait(true);
         $this->childStatus = $waitInfo['code'];
+        if (!in_array($waitInfo['signal'], $this->expectExitSignal)) {
+            throw new RuntimeException("Unexpected exit code {$waitInfo['signal']}");
+        }
+
         return true;
     }
 
@@ -270,6 +324,16 @@ class ProcessManager
         if (!is_array($code)) {
             $code = [$code];
         }
-        assert(in_array($this->childStatus, $code), "unexpected exit code {$this->childStatus}");
+        if (!in_array($this->childStatus, $code)) {
+            throw new RuntimeException("Unexpected exit code {$this->childStatus}");
+        }
+    }
+
+    public function setExpectExitSignal($signal = 0)
+    {
+        if (!is_array($signal)) {
+            $signal = [$signal];
+        }
+        $this->expectExitSignal = $signal;
     }
 }

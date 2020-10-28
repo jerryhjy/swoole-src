@@ -6,7 +6,8 @@ swoole_server: invalid fd
 <?php
 require __DIR__ . '/../include/bootstrap.php';
 const EOF = "\r\n\r\n";
-$pm = new ProcessManager;
+
+$pm = new SwooleTest\ProcessManager;
 $pm->parentFunc = function () use ($pm) {
     go(function () use ($pm) {
         $client = new Co\Client(SWOOLE_SOCK_TCP);
@@ -43,6 +44,5 @@ $pm->run();
 Warning: Swoole\Server::send(): fd can not be null in %s/tests/swoole_server/invalid_fd.php on line %d
 
 Warning: Swoole\Server::send(): invalid fd[-1] in %s/tests/swoole_server/invalid_fd.php on line %d
-[%s]	NOTICE	swReactorProcess_send2client (ERRNO 1005): send %d byte failed, session#100 does not exist
-
-Warning: Swoole\Server::send(): invalid fd[9223372036854775807] in %s/tests/swoole_server/invalid_fd.php on line %d%s
+[%s]	NOTICE	send_to_connection (ERRNO 1005): send %d byte failed, session#100 does not exist
+[%s]	NOTICE	send_to_connection (ERRNO 1005): send %d byte failed, session#9223372036854775807 does not exist

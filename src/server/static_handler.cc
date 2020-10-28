@@ -14,331 +14,268 @@
  +----------------------------------------------------------------------+
  */
 
-#include "server.h"
-#include "http.h"
-#include "mime_types.h"
+#include "swoole_static_handler.h"
 
 #include <string>
-#include <unordered_set>
+#include <dirent.h>
+#include <algorithm>
 
-using namespace std;
+namespace swoole {
 
-unordered_set<string> types;
-unordered_set<string> locations;
-
-class static_handler
-{
-private:
-    swServer *serv;
-    swHttpRequest *request;
-    swConnection *conn;
-    struct
-    {
-        off_t offset;
-        size_t length;
-        char filename[PATH_MAX];
-    } task;
-
-    char header_buffer[1024];
-    bool last;
-
-    int send_response();
-    int send_error_page(int status_code);
-
-public:
-    static_handler(swServer *_serv, swHttpRequest *_request, swConnection *_conn)
-    {
-        serv = _serv;
-        request = _request;
-        conn = _conn;
-        task.length = 0;
-        task.offset = 0;
-        last = false;
+namespace http_server {
+bool StaticHandler::is_modified(const std::string &date_if_modified_since) {
+    char date_tmp[64];
+    if (date_if_modified_since.empty() || date_if_modified_since.length() > sizeof(date_tmp) - 1) {
+        return false;
     }
-    bool done();
-};
 
-int static_handler::send_error_page(int status_code)
-{
-    swSendData response;
-    response.info.fd = conn->session_id;
-    response.info.type = SW_EVENT_TCP;
-    response.info.len = sw_snprintf(
-        header_buffer, sizeof(header_buffer),
-        "HTTP/1.1 %s\r\n"
-        "Server: " SW_HTTP_SERVER_SOFTWARE "\r\n"
-        "Content-Length: %zu\r\n"
-        "\r\n%s",
-        swHttp_get_status_message(status_code),
-        sizeof(SW_HTTP_PAGE_404) - 1, SW_HTTP_PAGE_404
-    );
-    response.data = header_buffer;
-    return swServer_master_send(serv, &response);
+    struct tm tm3;
+    memcpy(date_tmp, date_if_modified_since.c_str(), date_if_modified_since.length());
+    date_tmp[date_if_modified_since.length()] = 0;
+
+    const char *date_format = nullptr;
+
+    if (strptime(date_tmp, SW_HTTP_RFC1123_DATE_GMT, &tm3) != nullptr) {
+        date_format = SW_HTTP_RFC1123_DATE_GMT;
+    } else if (strptime(date_tmp, SW_HTTP_RFC1123_DATE_UTC, &tm3) != nullptr) {
+        date_format = SW_HTTP_RFC1123_DATE_UTC;
+    } else if (strptime(date_tmp, SW_HTTP_RFC850_DATE, &tm3) != nullptr) {
+        date_format = SW_HTTP_RFC850_DATE;
+    } else if (strptime(date_tmp, SW_HTTP_ASCTIME_DATE, &tm3) != nullptr) {
+        date_format = SW_HTTP_ASCTIME_DATE;
+    }
+    return date_format && mktime(&tm3) - (int) serv->timezone_ >= get_file_mtime();
 }
 
-int static_handler::send_response()
-{
-    struct stat file_stat;
-    /**
-     * file does not exist
-     */
-    if (lstat(task.filename, &file_stat) < 0)
-    {
-        if (last)
-        {
-            send_error_page(404);
-            return SW_TRUE;
-        }
-        else
-        {
-            return SW_FALSE;
-        }
-    }
-    if (file_stat.st_size == 0)
-    {
-        return SW_FALSE;
-    }
-    if ((file_stat.st_mode & S_IFMT) != S_IFREG)
-    {
-        return SW_FALSE;
-    }
-
-    swSendData response;
-    response.info.fd = conn->session_id;
-    response.info.type = SW_EVENT_TCP;
-
-    char *p = request->buffer->str + request->url_offset + request->url_length + 10;
-    char *pe = request->buffer->str + request->header_length;
-
-    char *date_if_modified_since = NULL;
-    int length_if_modified_since = 0;
-
-    int state = 0;
-    for (; p < pe; p++)
-    {
-        switch (state)
-        {
-        case 0:
-            if (strncasecmp(p, SW_STRL("If-Modified-Since")) == 0)
-            {
-                p += sizeof("If-Modified-Since");
-                state = 1;
-            }
-            break;
-        case 1:
-            if (!isspace(*p))
-            {
-                date_if_modified_since = p;
-                state = 2;
-            }
-            break;
-        case 2:
-            if (strncasecmp(p, SW_STRL("\r\n")) == 0)
-            {
-                length_if_modified_since = p - date_if_modified_since;
-                goto _check_modify_date;
-            }
-            break;
-        default:
-            break;
-        }
-    }
-
+std::string StaticHandler::get_date() {
     char date_[64];
-    struct tm *tm1;
-
-    _check_modify_date:
-    tm1 = gmtime(&serv->gs->now);
+    time_t now = ::time(nullptr);
+    struct tm *tm1 = gmtime(&now);
     strftime(date_, sizeof(date_), "%a, %d %b %Y %H:%M:%S %Z", tm1);
+    return std::string(date_);
+}
 
+std::string StaticHandler::get_date_last_modified() {
     char date_last_modified[64];
-#ifdef __MACH__
-    time_t file_mtime = file_stat.st_mtimespec.tv_sec;
-#else
-    time_t file_mtime = file_stat.st_mtim.tv_sec;
-#endif
-
+    time_t file_mtime = get_file_mtime();
     struct tm *tm2 = gmtime(&file_mtime);
     strftime(date_last_modified, sizeof(date_last_modified), "%a, %d %b %Y %H:%M:%S %Z", tm2);
-
-    if (state == 2)
-    {
-        struct tm tm3;
-        char date_tmp[64];
-        memcpy(date_tmp, date_if_modified_since, length_if_modified_since);
-        date_tmp[length_if_modified_since] = 0;
-
-        const char *date_format = nullptr;
-
-        if (strptime(date_tmp, SW_HTTP_RFC1123_DATE_GMT, &tm3) != NULL)
-        {
-            date_format = SW_HTTP_RFC1123_DATE_GMT;
-        }
-        else if (strptime(date_tmp, SW_HTTP_RFC1123_DATE_UTC, &tm3) != NULL)
-        {
-            date_format = SW_HTTP_RFC1123_DATE_UTC;
-        }
-        else if (strptime(date_tmp, SW_HTTP_RFC850_DATE, &tm3) != NULL)
-        {
-            date_format = SW_HTTP_RFC850_DATE;
-        }
-        else if (strptime(date_tmp, SW_HTTP_ASCTIME_DATE, &tm3) != NULL)
-        {
-            date_format = SW_HTTP_ASCTIME_DATE;
-        }
-        if (date_format && mktime(&tm3) - (int) serv->timezone >= file_mtime)
-        {
-            response.info.len = sw_snprintf(header_buffer, sizeof(header_buffer), "HTTP/1.1 304 Not Modified\r\n"
-                    "%s"
-                    "Date: %s\r\n"
-                    "Last-Modified: %s\r\n"
-                    "Server: %s\r\n\r\n", request->keep_alive ? "Connection: keep-alive\r\n" : "", date_,
-                    date_last_modified,
-                    SW_HTTP_SERVER_SOFTWARE);
-            response.data = header_buffer;
-            swServer_master_send(serv, &response);
-            goto _finish;
-        }
-    }
-
-    response.info.len = sw_snprintf(header_buffer, sizeof(header_buffer), "HTTP/1.1 200 OK\r\n"
-            "%s"
-            "Content-Length: %ld\r\n"
-            "Content-Type: %s\r\n"
-            "Date: %s\r\n"
-            "Last-Modified: %s\r\n"
-            "Server: %s\r\n\r\n", request->keep_alive ? "Connection: keep-alive\r\n" : "", (long) file_stat.st_size,
-            swoole_mime_type_get(task.filename), date_, date_last_modified,
-            SW_HTTP_SERVER_SOFTWARE);
-
-    response.data = header_buffer;
-
-#ifdef HAVE_TCP_NOPUSH
-    if (conn->tcp_nopush == 0)
-    {
-        if (swSocket_tcp_nopush(conn->fd, 1) == -1)
-        {
-            swSysWarn("swSocket_tcp_nopush() failed");
-        }
-        conn->tcp_nopush = 1;
-    }
-#endif
-    swServer_master_send(serv, &response);
-
-    task.offset = 0;
-    task.length = file_stat.st_size;
-
-    response.info.type = SW_EVENT_SENDFILE;
-    response.info.len = sizeof(swSendFile_request) + task.length + 1;
-    response.data = (char*) &task;
-
-    swServer_master_send(serv, &response);
-
-    _finish:
-    if (!request->keep_alive)
-    {
-        response.info.type = SW_EVENT_CLOSE;
-        response.data = NULL;
-        swServer_master_send(serv, &response);
-    }
-
-    return SW_TRUE;
+    return std::string(date_last_modified);
 }
 
-bool static_handler::done()
-{
+bool StaticHandler::hit() {
     char *p = task.filename;
-    char *url = request->buffer->str + request->url_offset;
-
+    const char *url = request_url.c_str();
+    size_t url_length = request_url.length();
     /**
      * discard the url parameter
      * [/test.jpg?version=1#position] -> [/test.jpg]
      */
-    char *params = (char*) memchr(url, '?', request->url_length);
-    if (params == NULL)
-    {
-        params = (char*) memchr(url, '#', request->url_length);
+    char *params = (char *) memchr(url, '?', url_length);
+    if (params == nullptr) {
+        params = (char *) memchr(url, '#', url_length);
     }
-    size_t n = params ? params - url : request->url_length;
+    size_t n = params ? params - url : url_length;
 
-    memcpy(p, serv->document_root, serv->document_root_len);
-    p += serv->document_root_len;
+    const std::string &document_root = serv->get_document_root();
 
-    if (locations.size() > 0)
-    {
-        for (auto i = locations.begin(); i != locations.end(); i++)
-        {
-            if (strncasecmp(i->c_str(), url, i->size()) == 0)
-            {
+    memcpy(p, document_root.c_str(), document_root.length());
+    p += document_root.length();
+
+    if (serv->locations->size() > 0) {
+        for (auto i = serv->locations->begin(); i != serv->locations->end(); i++) {
+            if (swoole_strcasect(url, url_length, i->c_str(), i->size())) {
                 last = true;
             }
         }
-        if (!last)
-        {
+        if (!last) {
             return false;
         }
     }
 
-    if (serv->document_root_len + n >= PATH_MAX)
-    {
+    if (document_root.length() + n >= PATH_MAX) {
         return false;
     }
 
     memcpy(p, url, n);
     p += n;
     *p = '\0';
+    if (dir_path != "") {
+        dir_path.clear();
+    }
+    dir_path = std::string(url, n);
 
-    task.filename[swHttp_url_decode(task.filename, p - task.filename)] = '\0';
+    l_filename = swHttp_url_decode(task.filename, p - task.filename);
+    task.filename[l_filename] = '\0';
 
-    if (swoole_strnpos(url, n, SW_STRL("..")) == -1)
-    {
+    if (swoole_strnpos(url, n, SW_STRL("..")) == -1) {
         goto _detect_mime_type;
     }
 
     char real_path[PATH_MAX];
-    if (!realpath(task.filename, real_path))
-    {
-        if (last)
-        {
-            send_error_page(404);
+    if (!realpath(task.filename, real_path)) {
+        if (last) {
+            status_code = SW_HTTP_NOT_FOUND;
             return true;
-        }
-        else
-        {
+        } else {
             return false;
         }
     }
 
-    if (real_path[serv->document_root_len] != '/')
-    {
+    if (real_path[document_root.length()] != '/') {
         return false;
     }
 
-    if (strncmp(real_path, serv->document_root, serv->document_root_len) != 0)
-    {
+    if (swoole_streq(real_path, strlen(real_path), document_root.c_str(), document_root.length()) != 0) {
         return false;
     }
 
-    /**
-     * non-static file
-     */
-    _detect_mime_type:
-    if (!swoole_mime_type_exists(task.filename))
-    {
+// non-static file
+_detect_mime_type:
+// file does not exist
+check_stat:
+    if (lstat(task.filename, &file_stat) < 0) {
+        if (last) {
+            status_code = SW_HTTP_NOT_FOUND;
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    if (S_ISLNK(file_stat.st_mode)) {
+        char buf[PATH_MAX];
+        ssize_t byte = ::readlink(task.filename, buf, sizeof(buf) - 1);
+        if (byte <= 0) {
+            return false;
+        }
+        buf[byte] = 0;
+        swoole_strlcpy(task.filename, buf, sizeof(task.filename));
+        goto check_stat;
+    }
+
+    if (serv->http_index_files && !serv->http_index_files->empty() && is_dir()) {
+        return true;
+    }
+
+    if (serv->http_autoindex && is_dir()) {
+        return true;
+    }
+
+    if (!swoole::mime_type::exists(task.filename)) {
         return false;
     }
 
-    return send_response();
+    if (!S_ISREG(file_stat.st_mode)) {
+        return false;
+    }
+    task.length = get_filesize();
+
+    return true;
 }
 
-int swHttp_static_handler(swServer *serv, swHttpRequest *request, swConnection *conn)
-{
-    static_handler handler(serv, request, conn);
-    return handler.done();
+size_t StaticHandler::get_index_page(std::set<std::string> &files, char *buffer, size_t size) {
+    int ret = 0;
+    char *p = buffer;
+
+    if (dir_path.back() != '/') {
+        dir_path.append("/");
+    }
+
+    ret = sw_snprintf(p,
+                      size - ret,
+                      "<html>\n"
+                      "<head>\n"
+                      "\t<meta charset='UTF-8'>\n<title>Index of %s</title>"
+                      "</head>\n"
+                      "<body>\n<h1>Index of %s</h1><hr/>"
+                      "\t<ul>\n",
+                      dir_path.c_str(),
+                      dir_path.c_str());
+
+    p += ret;
+
+    for (auto iter = files.begin(); iter != files.end(); iter++) {
+        if (*iter == "." || (dir_path == "/" && *iter == "..")) {
+            continue;
+        }
+        ret = sw_snprintf(
+            p, size - ret, "\t\t<li><a href=%s%s>%s</a></li>\n", dir_path.c_str(), (*iter).c_str(), (*iter).c_str());
+        p += ret;
+    }
+
+    ret = sw_snprintf(p,
+                      size - ret,
+                      "\t</ul>\n"
+                      "<hr><i>Powered by Swoole</i></body>\n"
+                      "</html>\n");
+
+    p += ret;
+
+    return p - buffer;
 }
 
-int swHttp_static_handler_add_location(swServer *serv, const char *location, size_t length)
-{
-    locations.insert(string(location, length));
-    return SW_OK;
+bool StaticHandler::get_dir_files(std::set<std::string> &index_files) {
+    struct dirent *ptr;
+
+    if (!is_dir()) {
+        return false;
+    }
+
+    DIR *dir = opendir(task.filename);
+    if (dir == nullptr) {
+        return false;
+    }
+
+    while ((ptr = readdir(dir)) != nullptr) {
+        index_files.insert(ptr->d_name);
+    }
+
+    closedir(dir);
+
+    return true;
 }
+
+bool StaticHandler::set_filename(std::string &filename) {
+    char *p = task.filename + l_filename;
+
+    if (*p != '/') {
+        *p = '/';
+        p += 1;
+    }
+
+    memcpy(p, filename.c_str(), filename.length());
+    p += filename.length();
+    *p = 0;
+
+    if (lstat(task.filename, &file_stat) < 0) {
+        return false;
+    }
+
+    if (!S_ISREG(file_stat.st_mode)) {
+        return false;
+    }
+
+    task.length = get_filesize();
+
+    return true;
+}
+}  // namespace http_server
+void Server::add_static_handler_location(const std::string &location) {
+    if (locations == nullptr) {
+        locations = new std::unordered_set<std::string>;
+    }
+    locations->insert(location);
+}
+
+void Server::add_static_handler_index_files(const std::string &file) {
+    if (http_index_files == nullptr) {
+        http_index_files = new std::vector<std::string>;
+    }
+
+    auto iter = std::find(http_index_files->begin(), http_index_files->end(), file);
+    if (iter == http_index_files->end()) {
+        http_index_files->push_back(file);
+    }
+}
+}  // namespace swoole

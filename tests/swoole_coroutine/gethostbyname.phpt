@@ -2,7 +2,9 @@
 swoole_coroutine: gethostbyname and dns cache
 --SKIPIF--
 <?php
-require __DIR__ . '/../include/skipif.inc'; ?>
+require __DIR__ . '/../include/skipif.inc';
+skip_if_offline();
+?>
 --FILE--
 <?php
 require __DIR__ . '/../include/bootstrap.php';
@@ -10,11 +12,11 @@ Co\run(function () {
     $map = IS_IN_TRAVIS ? [
         'www.google.com' => null,
         'www.youtube.com' => null,
-        'www.facebook.com' => null
+        'www.facebook.com' => null,
     ] : [
         'www.baidu.com' => null,
         'www.taobao.com' => null,
-        'www.qq.com' => null
+        'www.qq.com' => null,
     ];
 
     $first_time = microtime(true);
@@ -51,6 +53,7 @@ Co\run(function () {
         go(function () use ($map, $chan) {
             swoole_clear_dns_cache();
             $ip = co::gethostbyname(array_rand($map));
+            Assert::assert(filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4));
             $chan->push(Assert::assert(preg_match(IP_REGEX, $ip)));
         });
     }
@@ -67,8 +70,6 @@ Co\run(function () {
         Assert::assert($cache_time < $no_cache_multi_time);
         Assert::assert($no_cache_multi_time < $no_cache_time);
     }
-    echo co::gethostbyname('m.cust.edu.cn') . "\n";
 });
 ?>
 --EXPECTF--
-210.47.1.47

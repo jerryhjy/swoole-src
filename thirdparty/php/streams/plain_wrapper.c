@@ -46,7 +46,7 @@
 # include "win32/readdir.h"
 #endif
 
-#include "file_hook.h"
+#include "swoole_file_hook.h"
 
 #if !defined(WINDOWS) && !defined(NETWARE)
 extern int php_get_uid_by_name(const char *name, uid_t *uid);
@@ -945,17 +945,35 @@ static php_stream *stream_opener(php_stream_wrapper *wrapper, const char *path, 
     {
         return NULL;
     }
-    /**
-     * include file, cannot use async-io
-     */
+
+    /** phar_open_archive_fp, cannot use async-io */
+    if (
+        EG(current_execute_data) &&
+        EG(current_execute_data)->func &&
+        ZEND_USER_CODE(EG(current_execute_data)->func->type)
+    )
+    {
+        const zend_op* opline = EG(current_execute_data)->opline;
+        if (
+            opline && opline->opcode == ZEND_INCLUDE_OR_EVAL &&
+            (opline->extended_value & (ZEND_INCLUDE | ZEND_INCLUDE_ONCE | ZEND_REQUIRE | ZEND_REQUIRE_ONCE))
+        )
+        {
+            size_t path_len = strlen(path);
+            size_t phar_len = sizeof(".phar") - 1;
+            if (path_len > phar_len && memcmp(path + path_len - phar_len, ".phar", phar_len) == 0)
+            {
+                return php_stream_fopen_rel(path, mode, opened_path, options);
+            }
+        }
+    }
+    /** include file, cannot use async-io */
     if (options & STREAM_OPEN_FOR_INCLUDE)
     {
         return php_stream_fopen_rel(path, mode, opened_path, options);
     }
-    else
-    {
-        return stream_fopen_rel(path, mode, opened_path, options STREAMS_REL_CC);
-    }
+
+    return stream_fopen_rel(path, mode, opened_path, options STREAMS_REL_CC);
 }
 
 static int php_plain_files_url_stater(php_stream_wrapper *wrapper, const char *url, int flags, php_stream_statbuf *ssb, php_stream_context *context)

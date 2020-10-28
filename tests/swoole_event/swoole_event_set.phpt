@@ -1,7 +1,9 @@
 --TEST--
 swoole_event: swoole_event_set
 --SKIPIF--
-<?php require __DIR__ . '/../include/skipif.inc'; ?>
+<?php require __DIR__ . '/../include/skipif.inc';
+skip_if_offline();
+?>
 --FILE--
 <?php
 require __DIR__ . '/../include/bootstrap.php';
@@ -33,6 +35,7 @@ swoole_event_set($fp, null, 'write_callback', SWOOLE_EVENT_WRITE);
 
 swoole_event_write($fp, "GET / HTTP/1.1\r\nHost: www.qq.com\r\n\r\n");
 echo "Finish\n";
+swoole_event_wait();
 ?>
 --EXPECT--
 Finish

@@ -1,7 +1,9 @@
 --TEST--
 swoole_event: add event after server start
 --SKIPIF--
-<?php require __DIR__ . '/../include/skipif.inc'; ?>
+<?php require __DIR__ . '/../include/skipif.inc';
+skip_if_offline();
+?>
 --FILE--
 <?php
 require __DIR__ . '/../include/bootstrap.php';
@@ -13,7 +15,8 @@ const FILE = __DIR__.'/tmp_result.txt';
 $pm = new SwooleTest\ProcessManager;
 $pm->parentFunc = function ($pid) use ($pm) {
     $pm->kill();
-    Assert::contains(file_get_contents(FILE), 'HTTP/1.1 302 Moved Temporarily');
+    $str = swoole_string(file_get_contents(FILE));
+    Assert::true($str->contains('HTTP/1.1 302 Moved Temporarily') or $str->contains('HTTP/1.1 301 Moved Permanently'));
 };
 
 $pm->childFunc = function () use ($pm) {

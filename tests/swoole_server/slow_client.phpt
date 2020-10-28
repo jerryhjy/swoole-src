@@ -1,7 +1,10 @@
 --TEST--
 swoole_server: send big pipe message
 --SKIPIF--
-<?php require __DIR__ . '/../include/skipif.inc'; ?>
+<?php
+require __DIR__ . '/../include/skipif.inc';
+skip_if_extension_not_exist('sockets');
+?>
 --FILE--
 <?php
 require __DIR__ . '/../include/bootstrap.php';
@@ -9,7 +12,7 @@ $port = get_one_free_port();
 
 const N = 1024 * 1024 * 1;
 
-$pm = new ProcessManager;
+$pm = new SwooleTest\ProcessManager;
 
 $pm->parentFunc = function ($pid) use ($port)
 {

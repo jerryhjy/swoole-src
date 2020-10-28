@@ -1,11 +1,4 @@
 <?php
-if (substr(PHP_OS, 0, 3) == 'WIN') {
-    exit('skip for Windows');
-}
-if (!extension_loaded('swoole')) {
-    exit('skip swoole extension is required');
-}
-
 define('SWOOLE_COLOR_RED', 1);
 define('SWOOLE_COLOR_GREEN', 2);
 define('SWOOLE_COLOR_YELLOW', 3);
@@ -13,6 +6,36 @@ define('SWOOLE_COLOR_BLUE', 4);
 define('SWOOLE_COLOR_MAGENTA', 5);
 define('SWOOLE_COLOR_CYAN', 6);
 define('SWOOLE_COLOR_WHITE', 7);
+
+skip(
+    'Linux only',
+    substr(PHP_OS, 0, 3) === 'WIN',
+    SWOOLE_COLOR_RED
+);
+skip(
+    'Swoole extension is required',
+    !extension_loaded('swoole'),
+    SWOOLE_COLOR_RED
+);
+skip(
+    'Please set "swoole.use_shortname = On"',
+    !SWOOLE_USE_SHORTNAME,
+    SWOOLE_COLOR_RED
+);
+
+(function () {
+    global $argv;
+    skip_if_php_version_lower_than('7.0');
+    if (!getenv('PHPT') && substr($argv[0], -4) === '.php') {
+        skip('please read ' . dirname(dirname(__FILE__)) . '/README.md and try again');
+    }
+    if (preg_match('#/(swoole_[^/]+)/#', $_SERVER['SCRIPT_FILENAME'], $dir)) {
+        $dir = $dir[1];
+        if (stripos($dir, 'http2') !== false) {
+            skip_if_no_http2();
+        }
+    }
+})();
 
 function swoole_color(string $content, int $color): string
 {
@@ -81,7 +104,7 @@ function skip_if_file_not_exist(string $filename)
 
 function skip_if_command_not_found(string $command)
 {
-    skip("command {$command} not found", `{$command} --help | grep -i usage`);
+    skip("command {$command} not found", empty(`{$command} --help 2>&1 | grep -i usage`));
 }
 
 function skip_if_no_ssl()
@@ -109,15 +132,14 @@ function skip_if_no_http2()
 
 function skip_if_no_ipv6()
 {
-    $socket = socket_create(AF_INET6, SOCK_STREAM, SOL_TCP);
-    skip('no ipv6 address', !socket_bind($socket, "::1", 0));
+    skip('no ipv6 address', !@stream_socket_server('tcp://[::1]:0'));
 }
 
 function skip_if_no_top()
 {
     skip_if_darwin();
     skip('top provided by busybox (not support)', !empty(`top --help 2>&1 | grep -i busybox`));
-    skip('no top', empty(`top help 2>&1 | grep usage`));
+    skip('no top', empty(`top help 2>&1 | grep -i usage`));
 }
 
 function skip_if_darwin()
@@ -150,9 +172,16 @@ function skip_if_in_docker(string $reason = 'not support in docker')
     skip($reason, file_exists('/.dockerenv'));
 }
 
+function skip_if_offline()
+{
+    if (getenv("SKIP_ONLINE_TESTS")) {
+        skip('it\'s the online test but you are offline');
+    }
+}
+
 function skip_if_no_proxy(string $host, string $port)
 {
-    skip('no available proxy', IS_IN_TRAVIS || check_tcp_port($host, $port) <= 0);
+    skip('no available proxy', !check_tcp_port($host, $port));
 }
 
 function skip_if_no_http_proxy()
@@ -185,16 +214,19 @@ function skip_if_pdo_not_support_mysql8()
 function skip_if_not_mysql8()
 {
     require_once __DIR__ . '/config.php';
-    $skip = false;
-    go(function () use (&$skip) {
-        if (!preg_match(
-            '/caching_sha2_password/',
-            httpGetBody('http://' . MYSQL_SERVER_HOST . ':' . MYSQL_SERVER_PORT))
-        ) {
-            $skip = true;
+    $skip = true;
+    Swoole\Coroutine\run(function () use (&$skip) {
+        try {
+            if (preg_match(
+                '/caching_sha2_password/',
+                httpGetBody('http://' . MYSQL_SERVER_HOST . ':' . MYSQL_SERVER_PORT))
+            ) {
+                $skip = false;
+            }
+        } catch (Throwable $throwable) {
+            // ignored
         }
     });
-    Swoole\Event::wait();
     if ($skip) {
         skip('require mysql8');
     }
@@ -225,17 +257,3 @@ function skip_unsupported(string $message = '')
 {
     skip($message ?: 'the test cannot continue to work for some implementation reasons');
 }
-
-(function () {
-    global $argv;
-    skip_if_php_version_lower_than('7.0');
-    if (!getenv('PHPT') && substr($argv[0], -4) === '.php') {
-        skip('please read ' . dirname(dirname(__FILE__)) . '/README.md and try again');
-    }
-    if (preg_match('#\/(swoole_[^\/]+)\/#', $_SERVER['SCRIPT_FILENAME'], $dir)) {
-        $dir = $dir[1];
-        if (stripos($dir, 'http2') !== false) {
-            skip_if_no_http2();
-        }
-    }
-})();

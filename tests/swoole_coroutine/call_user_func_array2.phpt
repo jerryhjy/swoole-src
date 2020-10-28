@@ -1,7 +1,9 @@
 --TEST--
 swoole_coroutine: call_user_func_array 2
 --SKIPIF--
-<?php require __DIR__ . '/../include/skipif.inc'; ?>
+<?php require __DIR__ . '/../include/skipif.inc';
+skip_if_offline();
+?>
 --FILE--
 <?php
 require __DIR__ . '/../include/bootstrap.php';
@@ -12,7 +14,7 @@ class A
     {
         echo "bar\n";
         co::sleep(.02);
-        $result = co::gethostbyname('www.swoole.com');
+        $result = co::gethostbyname('www.tsinghua.edu.cn');
         echo "end\n";
         return $result;
     }
@@ -21,7 +23,7 @@ class A
 go(function () {
     $a = new A;
     $result = call_user_func_array([$a, 'bar'], []);
-    Assert::same($result, gethostbyname('www.swoole.com'));
+    Assert::same($result, gethostbyname('www.tsinghua.edu.cn'));
 });
 swoole_event_wait();
 ?>

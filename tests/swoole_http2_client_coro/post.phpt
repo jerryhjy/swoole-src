@@ -3,6 +3,7 @@ swoole_http2_client_coro: http2 without gzip and recv big data (window-update)
 --SKIPIF--
 <?php
 require __DIR__ . '/../include/skipif.inc';
+skip_if_offline();
 ?>
 --FILE--
 <?php
@@ -28,7 +29,7 @@ go(function () {
     $req->data = '{"type":"up"}';
     $cli->send($req);
     $response = $cli->recv();
-    Assert::same(json_decode($response->data)->error->code, 602);
+    Assert::true(in_array(json_decode($response->data)->error->code, [602, 10002], true));
 });
 ?>
 --EXPECT--

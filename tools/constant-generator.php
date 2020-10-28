@@ -1,8 +1,13 @@
 #!/usr/bin/env php
 <?php
-require __DIR__ . '/functions.php';
+require __DIR__ . '/bootstrap.php';
 
-$root_dir = dirname(__DIR__);
+$constant_php = LIBRARY_SRC_DIR . '/core/Constant.php';
+if (!file_exists($constant_php)) {
+    swoole_error("Unable to find source file [{$constant_php}]");
+}
+
+$root_dir = ROOT_DIR;
 $file_list = explode("\n", `cd {$root_dir} && git ls-files`);
 $file_list = array_filter($file_list, function (string $filename) {
     $ext = pathinfo($filename, PATHINFO_EXTENSION);
@@ -18,10 +23,9 @@ preg_match_all('/php_swoole_array_get_value\(.+?, "(.+?)", .+?\)/', $source_cont
 $matches = array_unique($matches[1]);
 $result = '';
 foreach ($matches as $option) {
-    $result .= space(4) . sprintf("const OPTION_%s = '%s';\n", strtoupper($option), $option);
+    $result .= space(4) . sprintf("public const OPTION_%s = '%s';\n\n", strtoupper($option), $option);
 }
 
-$constant_php = __DIR__ . '/../library/core/Constant.php';
 $constant_php_content = file_get_contents($constant_php);
 $constant_php_content = preg_replace(
     '/(\/\* \{\{\{ OPTION \*\/\n)([\s\S]*)(\/\* \}\}\} OPTION \*\/)/',

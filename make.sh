@@ -3,8 +3,17 @@ __DIR__=$(cd "$(dirname "$0")";pwd)
 
 cd ${__DIR__}
 phpize --clean
+
+# thirtparty
+git submodule init
+git submodule update
+
 phpize
-./configure --enable-openssl --enable-sockets --enable-mysqlnd --enable-http2
+if [ "$1" = "debug" ] ;then
+  ./configure --enable-openssl --enable-sockets --enable-mysqlnd --enable-http2 --enable-debug-log
+else
+  ./configure --enable-openssl --enable-sockets --enable-mysqlnd --enable-http2
+fi
 make clean
-make -j
+make -j 8
 make install

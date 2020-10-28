@@ -1,5 +1,14 @@
 <?php
+/**
+ * This file is part of Swoole, for internal use only
+ *
+ * @link     https://www.swoole.com
+ * @contact  team@swoole.com
+ * @license  https://github.com/swoole/library/blob/master/LICENSE
+ */
+
 require_once __DIR__ . '/config.php'; // (`once` because it may required in skip when we run phpt)
+require  __DIR__ . '/../../tools/bootstrap.php';
 
 // PHP settings
 error_reporting(E_ALL ^ E_DEPRECATED);
@@ -32,7 +41,7 @@ class_alias(SwooleTest\ServerManager::class, ServerManager::class);
 class_alias(SwooleTest\RandStr::class, RandStr::class);
 class_alias(SwooleTest\TcpStat::class, TcpStat::class);
 
-class Assert extends Swoole\Assert
+class Assert extends SwooleTest\Assert
 {
     protected static $throwException = false;
 }

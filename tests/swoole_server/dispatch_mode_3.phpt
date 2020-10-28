@@ -8,88 +8,75 @@ skip_if_in_valgrind();
 --FILE--
 <?php
 require __DIR__ . '/../include/bootstrap.php';
-const REQ_N = MAX_REQUESTS * 32;
-const CLIENT_N = 16;
 const WORKER_N = 16;
+
+use Swoole\Coroutine\Client;
+use Swoole\Timer;
+use Swoole\Event;
+use Swoole\Server;
 
 global $stats;
 $stats = array();
 $count = 0;
 $port = get_one_free_port();
 
-$pm = new ProcessManager;
-$pm->parentFunc = function ($pid) use ($port)
-{
+$pm = new SwooleTest\ProcessManager;
+$pm->parentFunc = function ($pid) use ($port) {
     global $count, $stats;
-    for ($i = 0; $i < CLIENT_N; $i++)
-    {
-        $cli = new swoole_client(SWOOLE_SOCK_TCP, SWOOLE_SOCK_ASYNC);
-        $cli->set([
-            'package_eof' => "\r\n\r\n",
-            'open_eof_split' => true,
-        ]);
-        $cli->count = 0;
-        $cli->on("connect", function (swoole_client $cli)
-        {
-            for ($i = 0; $i < REQ_N; $i++)
-            {
+    for ($i = 0; $i < MAX_CONCURRENCY; $i++) {
+        go(function () use ($port) {
+            $cli = new Client(SWOOLE_SOCK_TCP);
+            $cli->set([
+                'package_eof' => "\r\n\r\n",
+                'open_eof_split' => true,
+            ]);
+            $r = $cli->connect(TCP_SERVER_HOST, $port, 1);
+            Assert::assert($r);
+            for ($i = 0; $i < MAX_REQUESTS; $i++) {
                 $cli->send("hello world\r\n\r\n");
             }
-        });
-        $cli->on("receive", function (swoole_client $cli, $data)
-        {
-            global $stats;
-            $wid = trim($data);
-            if (isset($stats[$wid]))
-            {
-                $stats[$wid]++;
-            }
-            else
-            {
-                $stats[$wid] = 1;
-            }
-            $cli->count++;
-            if ($cli->count == REQ_N)
-            {
-                $cli->close();
+            $cli->count = 0;
+            for ($i = 0; $i < MAX_REQUESTS; $i++) {
+                $data = $cli->recv();
+                global $stats;
+                $wid = trim($data);
+                if (isset($stats[$wid])) {
+                    $stats[$wid]++;
+                } else {
+                    $stats[$wid] = 1;
+                }
+                $cli->count++;
+                if ($cli->count == MAX_REQUESTS) {
+                    $cli->close();
+                }
             }
         });
-        $cli->on("error", function (swoole_client $cli)
-        {
-            echo "error\n";
-        });
-        $cli->on("close", function (swoole_client $cli)
-        {
-
-        });
-        $cli->connect('127.0.0.1', $port, 0.1);
     }
-    swoole_event::wait();
-    swoole_process::kill($pid);
+    Event::wait();
+    Swoole\Process::kill($pid);
     phpt_var_dump($stats);
-    Assert::assert(($stats[5] + $stats[10]) < REQ_N);
-    Assert::same(array_sum($stats) / count($stats), REQ_N);
+    Assert::eq(count($stats), WORKER_N);
+    Assert::lessThan($stats[5], MAX_REQUESTS);
+    Assert::lessThan($stats[10], MAX_REQUESTS);
+    Assert::same(array_sum($stats), MAX_REQUESTS * MAX_CONCURRENCY);
     echo "DONE\n";
 };
 
-$pm->childFunc = function () use ($pm, $port)
-{
-    $serv = new swoole_server('127.0.0.1', $port, SWOOLE_PROCESS);
+$pm->childFunc = function () use ($pm, $port) {
+    $serv = new Server('127.0.0.1', $port, SWOOLE_PROCESS);
     $serv->set(array(
         "worker_num" => WORKER_N,
         'dispatch_mode' => 3,
         'package_eof' => "\r\n\r\n",
+        'enable_coroutine' => false,
         'open_eof_split' => true,
         'log_file' => '/dev/null',
     ));
-    $serv->on("WorkerStart", function (\swoole_server $serv)  use ($pm)
-    {
+    $serv->on("WorkerStart", function (Server $serv) use ($pm) {
         $pm->wakeup();
     });
-    $serv->on('receive', function (swoole_server $serv, $fd, $rid, $data)
-    {
-        if ($serv->worker_id == 10 or $serv->worker_id == 5)
-        {
+    $serv->on('receive', function (Server $serv, $fd, $rid, $data) {
+        if ($serv->worker_id == 10 or $serv->worker_id == 5) {
             usleep(5000);
         }
         $serv->send($fd, $serv->worker_id . "\r\n\r\n");

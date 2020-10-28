@@ -1,14 +1,12 @@
 English | [中文](./README-CN.md)
 
-Swoole
-======
-[![Latest Version](https://img.shields.io/github/release/swoole/swoole-src.svg?style=flat-square)](https://github.com/swoole/swoole-src/releases)
+# Swoole
+
+[![Latest Version](https://img.shields.io/github/release/swoole/swoole-src.svg)](https://github.com/swoole/swoole-src/releases)
 [![Build Status](https://api.travis-ci.org/swoole/swoole-src.svg)](https://travis-ci.org/swoole/swoole-src)
 [![License](https://img.shields.io/badge/license-apache2-blue.svg)](LICENSE)
-[![Join the chat at https://gitter.im/swoole/swoole-src](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/swoole/swoole-src?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![Coverity Scan Build Status](https://scan.coverity.com/projects/11654/badge.svg)](https://scan.coverity.com/projects/swoole-swoole-src)
-[![Backers on Open Collective](https://opencollective.com/swoole-src/backers/badge.svg)](#backers) 
-[![Sponsors on Open Collective](https://opencollective.com/swoole-src/sponsors/badge.svg)](#sponsors) 
+[![codecov](https://codecov.io/gh/swoole/swoole-src/branch/master/graph/badge.svg)](https://codecov.io/gh/swoole/swoole-src)
 
 ![](./mascot.png)
 
@@ -18,7 +16,7 @@ Swoole
 
 The network layer in Swoole is event-based and takes full advantage of the underlying epoll/kqueue implementation, making it really easy to serve millions of requests.
 
-Swoole 4.x use a brand new engine kernel and now it has a full-time developer team, so we are entering an unprecedented period in PHP history which offers a unique possibility for rapid evolution in performance.
+Swoole 4.x uses a brand new engine kernel and now it has a full-time developer team, so we are entering an unprecedented period in PHP history which offers a unique possibility for rapid evolution in performance.
 
 ## ⚡️Coroutine
 
@@ -32,23 +30,24 @@ Concurrency 10K requests to read data from MySQL takes only 0.2s!
 
 ```php
 $s = microtime(true);
-for ($c = 100; $c--;) {
-    go(function () {
-        $mysql = new Swoole\Coroutine\MySQL;
-        $mysql->connect([
-            'host' => '127.0.0.1',
-            'user' => 'root',
-            'password' => 'root',
-            'database' => 'test'
-        ]);
-        $statement = $mysql->prepare('SELECT * FROM `user`');
-        for ($n = 100; $n--;) {
-            $result = $statement->execute();
-            assert(count($result) > 0);
-        }
-    });
-}
-Swoole\Event::wait();
+Co\run(function() {
+    for ($c = 100; $c--;) {
+        go(function () {
+            $mysql = new Swoole\Coroutine\MySQL;
+            $mysql->connect([
+                'host' => '127.0.0.1',
+                'user' => 'root',
+                'password' => 'root',
+                'database' => 'test'
+            ]);
+            $statement = $mysql->prepare('SELECT * FROM `user`');
+            for ($n = 100; $n--;) {
+                $result = $statement->execute();
+                assert(count($result) > 0);
+            }
+        });
+    }
+});
 echo 'use ' . (microtime(true) - $s) . ' s';
 ```
 
@@ -271,15 +270,16 @@ Simply call the `Swoole\Runtime::enableCoroutine()` method at the top of your sc
 ```php
 Swoole\Runtime::enableCoroutine();
 $s = microtime(true);
-for ($c = 100; $c--;) {
-    go(function () {
-        ($redis = new Redis)->connect('127.0.0.1', 6379);
-        for ($n = 100; $n--;) {
-            assert($redis->get('awesome') === 'swoole');
-        }
-    });
-}
-Swoole\Event::wait();
+Co\run(function() {
+    for ($c = 100; $c--;) {
+        go(function () {
+            ($redis = new Redis)->connect('127.0.0.1', 6379);
+            for ($n = 100; $n--;) {
+                assert($redis->get('awesome') === 'swoole');
+            }
+        });
+    }
+});
 echo 'use ' . (microtime(true) - $s) . ' s';
 ```
 
@@ -294,140 +294,139 @@ Just see what the Swoole brings, just imagine...
 ```php
 Swoole\Runtime::enableCoroutine();
 $s = microtime(true);
-
-// i just want to sleep...
-for ($c = 100; $c--;) {
-    go(function () {
-        for ($n = 100; $n--;) {
-            usleep(1000);
-        }
-    });
-}
-
-// 10K file read and write
-for ($c = 100; $c--;) {
-    go(function () use ($c) {
-        $tmp_filename = "/tmp/test-{$c}.php";
-        for ($n = 100; $n--;) {
-            $self = file_get_contents(__FILE__);
-            file_put_contents($tmp_filename, $self);
-            assert(file_get_contents($tmp_filename) === $self);
-        }
-        unlink($tmp_filename);
-    });
-}
-
-// 10K pdo and mysqli read
-for ($c = 50; $c--;) {
-    go(function () {
-        $pdo = new PDO('mysql:host=127.0.0.1;dbname=test;charset=utf8', 'root', 'root');
-        $statement = $pdo->prepare('SELECT * FROM `user`');
-        for ($n = 100; $n--;) {
-            $statement->execute();
-            assert(count($statement->fetchAll()) > 0);
-        }
-    });
-}
-for ($c = 50; $c--;) {
-    go(function () {
-        $mysqli = new Mysqli('127.0.0.1', 'root', 'root', 'test');
-        $statement = $mysqli->prepare('SELECT `id` FROM `user`');
-        for ($n = 100; $n--;) {
-            $statement->bind_result($id);
-            $statement->execute();
-            $statement->fetch();
-            assert($id > 0);
-        }
-    });
-}
-
-// php_stream tcp server & client with 12.8K requests in single process
-function tcp_pack(string $data): string
-{
-    return pack('n', strlen($data)) . $data;
-}
-
-function tcp_length(string $head): int
-{
-    return unpack('n', $head)[1];
-}
-
-go(function () {
-    $ctx = stream_context_create(['socket' => ['so_reuseaddr' => true, 'backlog' => 128]]);
-    $socket = stream_socket_server(
-        'tcp://0.0.0.0:9502',
-        $errno, $errstr, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN, $ctx
-    );
-    if (!$socket) {
-        echo "$errstr ($errno)\n";
-    } else {
-        $i = 0;
-        while ($conn = stream_socket_accept($socket, 1)) {
-            stream_set_timeout($conn, 5);
+Co\run(function() {
+    // i just want to sleep...
+    for ($c = 100; $c--;) {
+        go(function () {
             for ($n = 100; $n--;) {
-                $data = fread($conn, tcp_length(fread($conn, 2)));
-                assert($data === "Hello Swoole Server #{$n}!");
-                fwrite($conn, tcp_pack("Hello Swoole Client #{$n}!"));
+                usleep(1000);
             }
-            if (++$i === 128) {
-                fclose($socket);
-                break;
-            }
-        }
+        });
     }
-});
-for ($c = 128; $c--;) {
+
+    // 10K file read and write
+    for ($c = 100; $c--;) {
+        go(function () use ($c) {
+            $tmp_filename = "/tmp/test-{$c}.php";
+            for ($n = 100; $n--;) {
+                $self = file_get_contents(__FILE__);
+                file_put_contents($tmp_filename, $self);
+                assert(file_get_contents($tmp_filename) === $self);
+            }
+            unlink($tmp_filename);
+        });
+    }
+
+    // 10K pdo and mysqli read
+    for ($c = 50; $c--;) {
+        go(function () {
+            $pdo = new PDO('mysql:host=127.0.0.1;dbname=test;charset=utf8', 'root', 'root');
+            $statement = $pdo->prepare('SELECT * FROM `user`');
+            for ($n = 100; $n--;) {
+                $statement->execute();
+                assert(count($statement->fetchAll()) > 0);
+            }
+        });
+    }
+    for ($c = 50; $c--;) {
+        go(function () {
+            $mysqli = new Mysqli('127.0.0.1', 'root', 'root', 'test');
+            $statement = $mysqli->prepare('SELECT `id` FROM `user`');
+            for ($n = 100; $n--;) {
+                $statement->bind_result($id);
+                $statement->execute();
+                $statement->fetch();
+                assert($id > 0);
+            }
+        });
+    }
+
+    // php_stream tcp server & client with 12.8K requests in single process
+    function tcp_pack(string $data): string
+    {
+        return pack('n', strlen($data)) . $data;
+    }
+
+    function tcp_length(string $head): int
+    {
+        return unpack('n', $head)[1];
+    }
+
     go(function () {
-        $fp = stream_socket_client("tcp://127.0.0.1:9502", $errno, $errstr, 1);
-        if (!$fp) {
+        $ctx = stream_context_create(['socket' => ['so_reuseaddr' => true, 'backlog' => 128]]);
+        $socket = stream_socket_server(
+            'tcp://0.0.0.0:9502',
+            $errno, $errstr, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN, $ctx
+        );
+        if (!$socket) {
             echo "$errstr ($errno)\n";
         } else {
-            stream_set_timeout($fp, 5);
-            for ($n = 100; $n--;) {
-                fwrite($fp, tcp_pack("Hello Swoole Server #{$n}!"));
-                $data = fread($fp, tcp_length(fread($fp, 2)));
-                assert($data === "Hello Swoole Client #{$n}!");
+            $i = 0;
+            while ($conn = stream_socket_accept($socket, 1)) {
+                stream_set_timeout($conn, 5);
+                for ($n = 100; $n--;) {
+                    $data = fread($conn, tcp_length(fread($conn, 2)));
+                    assert($data === "Hello Swoole Server #{$n}!");
+                    fwrite($conn, tcp_pack("Hello Swoole Client #{$n}!"));
+                }
+                if (++$i === 128) {
+                    fclose($socket);
+                    break;
+                }
             }
-            fclose($fp);
         }
     });
-}
-
-// udp server & client with 12.8K requests in single process
-go(function () {
-    $socket = new Swoole\Coroutine\Socket(AF_INET, SOCK_DGRAM, 0);
-    $socket->bind('127.0.0.1', 9503);
-    $client_map = [];
     for ($c = 128; $c--;) {
-        for ($n = 0; $n < 100; $n++) {
-            $recv = $socket->recvfrom($peer);
-            $client_uid = "{$peer['address']}:{$peer['port']}";
-            $id = $client_map[$client_uid] = ($client_map[$client_uid] ?? -1) + 1;
-            assert($recv === "Client: Hello #{$id}!");
-            $socket->sendto($peer['address'], $peer['port'], "Server: Hello #{$id}!");
-        }
-    }
-    $socket->close();
-});
-for ($c = 128; $c--;) {
-    go(function () {
-        $fp = stream_socket_client("udp://127.0.0.1:9503", $errno, $errstr, 1);
-        if (!$fp) {
-            echo "$errstr ($errno)\n";
-        } else {
-            for ($n = 0; $n < 100; $n++) {
-                fwrite($fp, "Client: Hello #{$n}!");
-                $recv = fread($fp, 1024);
-                list($address, $port) = explode(':', (stream_socket_get_name($fp, true)));
-                assert($address === '127.0.0.1' && (int)$port === 9503);
-                assert($recv === "Server: Hello #{$n}!");
+        go(function () {
+            $fp = stream_socket_client("tcp://127.0.0.1:9502", $errno, $errstr, 1);
+            if (!$fp) {
+                echo "$errstr ($errno)\n";
+            } else {
+                stream_set_timeout($fp, 5);
+                for ($n = 100; $n--;) {
+                    fwrite($fp, tcp_pack("Hello Swoole Server #{$n}!"));
+                    $data = fread($fp, tcp_length(fread($fp, 2)));
+                    assert($data === "Hello Swoole Client #{$n}!");
+                }
+                fclose($fp);
             }
-            fclose($fp);
-        }
-    });
-}
+        });
+    }
 
-Swoole\Event::wait();
+    // udp server & client with 12.8K requests in single process
+    go(function () {
+        $socket = new Swoole\Coroutine\Socket(AF_INET, SOCK_DGRAM, 0);
+        $socket->bind('127.0.0.1', 9503);
+        $client_map = [];
+        for ($c = 128; $c--;) {
+            for ($n = 0; $n < 100; $n++) {
+                $recv = $socket->recvfrom($peer);
+                $client_uid = "{$peer['address']}:{$peer['port']}";
+                $id = $client_map[$client_uid] = ($client_map[$client_uid] ?? -1) + 1;
+                assert($recv === "Client: Hello #{$id}!");
+                $socket->sendto($peer['address'], $peer['port'], "Server: Hello #{$id}!");
+            }
+        }
+        $socket->close();
+    });
+    for ($c = 128; $c--;) {
+        go(function () {
+            $fp = stream_socket_client("udp://127.0.0.1:9503", $errno, $errstr, 1);
+            if (!$fp) {
+                echo "$errstr ($errno)\n";
+            } else {
+                for ($n = 0; $n < 100; $n++) {
+                    fwrite($fp, "Client: Hello #{$n}!");
+                    $recv = fread($fp, 1024);
+                    list($address, $port) = explode(':', (stream_socket_get_name($fp, true)));
+                    assert($address === '127.0.0.1' && (int)$port === 9503);
+                    assert($recv === "Server: Hello #{$n}!");
+                }
+                fclose($fp);
+            }
+        });
+    }
+});
 echo 'use ' . (microtime(true) - $s) . ' s';
 ```
 
@@ -435,23 +434,19 @@ echo 'use ' . (microtime(true) - $s) . ' s';
 
 > As with any open source project, Swoole always provides the most reliable stability and the most powerful features in **the latest released version**. Please ensure as much as possible that you are using the latest version.
 
-### 1. From binary package (beginners + dev-env)
-
-See our [download page](https://www.swoole.com/page/download)
-
 ### Compiling requirements
 
-- Linux, OS X or Cygwin, WSL
-- PHP 7.0.0 or later (The higher the version, the better the performance.)
-- GCC 4.8 or later
++ Linux, OS X or Cygwin, WSL
++ PHP 7.0.0 or later (The higher the version, the better the performance.)
++ GCC 4.8 or later
 
-### 2. Install via PECL (beginners)
+### 1. Install via PECL (beginners)
 
 ```shell
 pecl install swoole
 ```
 
-### 3. Install from source (recommended)
+### 2. Install from source (recommended)
 
 Please download the source packages from [Releases](https://github.com/swoole/swoole-src/releases) or:
 
@@ -477,10 +472,10 @@ After compiling and installing to the system successfully, you have to add a new
 
 > for example: `./configure --enable-openssl --enable-sockets`
 
-- `--enable-openssl` or `--with-openssl-dir=DIR`
-- `--enable-sockets`
-- `--enable-http2`
-- `--enable-mysqlnd` (need mysqlnd, it just for supporting `$mysql->escape` method)
++ `--enable-openssl` or `--with-openssl-dir=DIR`
++ `--enable-sockets`
++ `--enable-http2`
++ `--enable-mysqlnd` (need mysqlnd, it just for supporting `$mysql->escape` method)
 
 ### Upgrade
 
@@ -489,7 +484,6 @@ After compiling and installing to the system successfully, you have to add a new
 1. `pecl upgrade swoole`
 2. `git pull && cd swoole-src && make clean && make && sudo make install`
 3. if you change your PHP version, please re-run `phpize clean && phpize` then try to compile
-
 
 ### Major change since version 4.3.0
 
@@ -507,28 +501,31 @@ sudo make install
 Enable it by adding a new line `extension=swoole_async.so` to `php.ini`.
 
 ## 💎 Frameworks & Components
-- [**Hyperf**](https://github.com/hyperf-cloud/hyperf) is a coroutine framework that focuses on hyperspeed and flexibility, specifically used for build microservices or middlewares.
-- [**Swoft**](https://github.com/swoft-cloud/swoft) is a modern, high-performance AOP and coroutine PHP framework.
-- [**Easyswoole**](https://www.easyswoole.com) is a simple, high-performance PHP framework, based on Swoole, which makes using Swoole as easy as `echo "hello world"`.
-- [**Saber**](https://github.com/swlib/saber) Is a human-friendly, high-performance HTTP client component that has almost everything you can imagine.
++ [**Hyperf**](https://github.com/hyperf/hyperf) is a coroutine framework that focuses on hyperspeed and flexibility, specifically used for build microservices or middlewares.
++ [**Swoft**](https://github.com/swoft-cloud/swoft) is a modern, high-performance AOP and coroutine PHP framework.
++ [**Easyswoole**](https://www.easyswoole.com) is a simple, high-performance PHP framework, based on Swoole, which makes using Swoole as easy as `echo "hello world"`.
++ [**MixPHP**](https://github.com/mix-php/mix) is a powerful single-threaded coroutine framework with a very small footprint, simple and elegant.
++ [**imi**](https://github.com/Yurunsoft/imi) is a high-performance coroutine application development framework based on PHP Swoole, which supports the development of HttpApi, WebSocket, TCP, UDP services.
++ [**Saber**](https://github.com/swlib/saber) is a human-friendly, high-performance HTTP client component that has almost everything you can imagine.
++ [**One**](https://github.com/lizhichao/one) is a minimalist, high-performance PHP framework that supports the [swoole | php-fpm] environment
 
 ## 🛠 Develop & Discussion
 
-* __中文文档__: <http://wiki.swoole.com>
-* __Documentation__: <https://www.swoole.co.uk/docs>
-* __IDE Helper & API__: <https://github.com/swoole/ide-helper>
-* __中文社区__: <https://wiki.swoole.com/wiki/page/p-discussion.html>
-* __Twitter__: <https://twitter.com/php_swoole>
-* __Slack Group__: <https://swoole.slack.com>
++ __中文文档__: <https://wiki.swoole.com>
++ __Documentation__: <https://www.swoole.co.uk/docs>
++ __IDE Helper & API__: <https://github.com/swoole/ide-helper>
++ __中文社区__: <https://wiki.swoole.com/#/other/discussion>
++ __Twitter__: <https://twitter.com/php_swoole>
++ __Slack Group__: <https://swoole.slack.com>
 
 ## 🍭 Benchmark
 
 + On the open source [Techempower Web Framework benchmarks](https://www.techempower.com/benchmarks/#section=data-r17) Swoole used MySQL database benchmark to rank first, and all performance tests ranked in the first echelon.
-+ You can just run [Benchmark Script](./benchmark/benchmark.php) to quickly test the maximum QPS of Swoole-HTTP-Server on your machine.
++ You can just run [Benchmark Script](https://github.com/swoole/benchmark/blob/master/benchmark.php) to quickly test the maximum QPS of Swoole-HTTP-Server on your machine.
 
-## 🖊️ Security issues
+## 🔰️ Security issues
 
-Security issues should be reported privately, via email, to the Swoole develop team team@swoole.com. You should receive a response within 24 hours. If for some reason you do not, please follow up via email to ensure we received your original message.
+Security issues should be reported privately, via email, to the Swoole develop team [team@swoole.com](mailto:team@swoole.com). You should receive a response within 24 hours. If for some reason you do not, please follow up via email to ensure we received your original message.
 
 ## 🖊️ Contribution
 

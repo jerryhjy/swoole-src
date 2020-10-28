@@ -7,8 +7,6 @@
 *.so
 *.loT
 *.pid
-*.gcno
-*.gcov
 /Debug/*
 modules/*
 /.deps
@@ -20,8 +18,9 @@ modules/*
 /cmake_install.cmake
 /CMakeCache.txt
 /Makefile
-/lib
 /bin
+/lib
+/library
 /install_manifest.txt
 /config.guess
 /config.h
@@ -97,3 +96,12 @@ core-tests/samples/cmake_install\.cmake
 core-tests/samples/CMakeCache\.txt
 core-tests/samples/bin/
 core-tests/samples/CMakeFiles/
+/out
+/gcov_result
+
+# coverage
+*.gcno
+*.gcov
+*.gcda
+*.info
+/html

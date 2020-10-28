@@ -1,7 +1,9 @@
 --TEST--
 swoole_http_client_coro: multi http client
 --SKIPIF--
-<?php require __DIR__ . '/../include/skipif.inc'; ?>
+<?php require __DIR__ . '/../include/skipif.inc';
+skip_if_offline();
+?>
 --FILE--
 <?php
 require __DIR__ . '/../include/bootstrap.php';
@@ -29,9 +31,10 @@ go(function () {
 
     $ret1 = ($cli1->get('/'));
     $ret2 = ($cli2->get('/'));
-    if (!$ret1 or !$ret2)
-    {
+    if (!$ret1 or !$ret2)    {
         echo "ERROR\n";
+        var_dump($cli1->errCode, $cli1->errMsg);
+        var_dump($cli2->errCode, $cli2->errMsg);
     }
     else
     {

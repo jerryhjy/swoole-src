@@ -3,7 +3,7 @@ swoole_server: reload in process mode
 --SKIPIF--
 <?php
 require __DIR__ . '/../include/skipif.inc';
-skip_if_in_valgrind();
+//skip_if_in_valgrind();
 ?>
 --FILE--
 <?php
@@ -13,7 +13,7 @@ $counter = [
     'worker' => new Swoole\Atomic(),
     'task_worker' => new Swoole\Atomic()
 ];
-$pm = new ProcessManager;
+$pm = new SwooleTest\ProcessManager;
 $pm->parentFunc = function () use ($pm) {
     global $counter, $worker_num, $task_worker_num;
     while (!file_exists(TEST_PID_FILE)) {
